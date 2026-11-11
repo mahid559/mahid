@@ -6,24 +6,24 @@ import { ensureGsap, prefersReducedMotion } from "@/lib/gsap";
 import { ShapeTrail } from "./ShapeTrail";
 
 const SHAKE_FRAMES: Keyframe[] = [
-  { transform: "translate(0, 0)" },
-  { transform: "translate(-4px, 2px)" },
-  { transform: "translate(4px, -2px)" },
-  { transform: "translate(-3px, -1px)" },
-  { transform: "translate(2px, 1px)" },
-  { transform: "translate(0, 0)" },
+  { transform: "none" },
+  { transform: "scale(1.012) translate(-7px, 3px) rotate(-0.5deg)" },
+  { transform: "scale(1.008) translate(6px, -4px) rotate(0.45deg)" },
+  { transform: "scale(1.005) translate(-4px, 2px) rotate(-0.25deg)" },
+  { transform: "scale(1.002) translate(3px, -1px) rotate(0.15deg)" },
+  { transform: "translate(-1px, 1px)" },
+  { transform: "none" },
 ];
 
 export function SkillsSection() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [animKey, setAnimKey] = useState(0);
-  const [displayAvg, setDisplayAvg] = useState(() => {
-    const items = SKILLS_CONTENT.categories[0].items;
-    return Math.round(items.reduce((s, x) => s + x.level, 0) / items.length);
-  });
+  const [isLive, setIsLive] = useState(false);
+  const [displayAvg, setDisplayAvg] = useState(0);
 
   const sectionRef = useRef<HTMLElement>(null);
   const skWrapRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const current = SKILLS_CONTENT.categories[activeIdx] ?? SKILLS_CONTENT.categories[0];
   const accentHex = ACCENT_HEX[current.accent];
@@ -34,7 +34,35 @@ export function SkillsSection() {
     return Math.round(sum / current.items.length);
   }, [current]);
 
+  // Initial scroll-triggered reveal (.sk.is-live at ScrollTrigger start: "top 85%", once: true)
   useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    if (prefersReducedMotion()) {
+      const id = window.setTimeout(() => {
+        setIsLive(true);
+        setDisplayAvg(targetAvg);
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
+
+    const { ScrollTrigger } = ensureGsap();
+    const st = ScrollTrigger.create({
+      trigger: section,
+      start: "top 85%",
+      once: true,
+      onEnter: () => {
+        setIsLive(true);
+        setAnimKey((k) => k + 1);
+      },
+    });
+
+    return () => st.kill();
+  }, [targetAvg]);
+
+  useEffect(() => {
+    if (!isLive) return;
     if (prefersReducedMotion()) {
       const id = window.setTimeout(() => setDisplayAvg(targetAvg), 0);
       return () => window.clearTimeout(id);
@@ -43,17 +71,18 @@ export function SkillsSection() {
     const obj = { val: 0 };
     const tween = gsap.to(obj, {
       val: targetAvg,
-      duration: 0.65,
+      duration: 0.7,
       ease: "power2.out",
       onUpdate: () => setDisplayAvg(Math.round(obj.val)),
     });
     return () => {
       tween.kill();
     };
-  }, [targetAvg, animKey]);
+  }, [targetAvg, animKey, isLive]);
 
   const handleSelectTab = (idx: number) => {
-    if (idx === activeIdx) return;
+    if (idx === activeIdx && isLive) return;
+    setIsLive(true);
     setActiveIdx(idx);
     setAnimKey((k) => k + 1);
     if (!prefersReducedMotion() && skWrapRef.current?.animate) {
@@ -61,6 +90,20 @@ export function SkillsSection() {
         duration: 460,
         easing: "ease-out",
       });
+    }
+  };
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    const count = SKILLS_CONTENT.categories.length;
+    let next = -1;
+    if (e.key === "ArrowRight") next = (idx + 1) % count;
+    else if (e.key === "ArrowLeft") next = (idx - 1 + count) % count;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = count - 1;
+    if (next >= 0) {
+      e.preventDefault();
+      handleSelectTab(next);
+      tabRefs.current[next]?.focus();
     }
   };
 
@@ -85,7 +128,11 @@ export function SkillsSection() {
         </h2>
         <div className="mt-4 h-px w-full bg-[var(--hair)]" aria-hidden="true" />
 
-        <div ref={skWrapRef} className="mt-7">
+        <div
+          id="skills"
+          ref={skWrapRef}
+          className={`sk ${isLive ? "is-live" : ""} mt-7`}
+        >
           {/* 3 Category Tabs */}
           <div
             role="tablist"
@@ -98,10 +145,14 @@ export function SkillsSection() {
               return (
                 <button
                   key={cat.id}
+                  ref={(el) => {
+                    tabRefs.current[idx] = el;
+                  }}
                   role="tab"
                   type="button"
                   aria-selected={selected}
                   onClick={() => handleSelectTab(idx)}
+                  onKeyDown={(e) => handleTabKeyDown(e, idx)}
                   className="sk-tab"
                   style={{ ["--accent" as string]: tabAccent }}
                 >
@@ -166,27 +217,34 @@ export function SkillsSection() {
               </div>
             </div>
 
-            {/* Right Column: 20-Segment Bars */}
+            {/* Right Column: 20-Segment Stepped Bars */}
             <div className="relative z-10 flex flex-col justify-center gap-4">
-              {current.items.map((item) => (
-                <div key={item.name}>
-                  <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                    <span className="font-semibold text-sm sm:text-base text-[var(--ink)]">
-                      {item.name}
-                    </span>
-                    <span className="mono text-xs font-bold text-[var(--ink-soft)]">
-                      {item.level}
-                      {UI_LABELS.skillsMaxSuffix}
-                    </span>
+              {current.items.map((item, nIdx) => {
+                const steps = Math.max(1, Math.round(item.level / 5));
+                return (
+                  <div
+                    key={item.name}
+                    style={{
+                      ["--n" as string]: nIdx,
+                      ["--v" as string]: `${item.level}%`,
+                      ["--s" as string]: steps,
+                    }}
+                  >
+                    <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                      <span className="font-semibold text-sm sm:text-base text-[var(--ink)]">
+                        {item.name}
+                      </span>
+                      <span className="sk-val mono text-xs font-bold text-[var(--ink-soft)]">
+                        {item.level}
+                        {UI_LABELS.skillsMaxSuffix}
+                      </span>
+                    </div>
+                    <div className="sk-bar">
+                      <div className="sk-bar-fill" />
+                    </div>
                   </div>
-                  <div className="sk-bar">
-                    <div
-                      className="sk-bar-fill"
-                      style={{ width: `${item.level}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -194,4 +252,3 @@ export function SkillsSection() {
     </section>
   );
 }
-
