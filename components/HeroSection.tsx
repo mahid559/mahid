@@ -17,9 +17,11 @@ import {
 
 const DOT_SHAPES = [
   "polygon(50% 5%, 76% 14%, 93% 36%, 93% 64%, 76% 86%, 50% 95%, 24% 86%, 7% 64%, 7% 36%, 24% 14%)",
-  "polygon(12% 12%, 50% 12%, 88% 12%, 88% 50%, 88% 88%, 50% 88%, 12% 88%, 12% 50%, 12% 28%, 12% 12%)",
-  "polygon(50% 6%, 65% 34%, 80% 60%, 94% 88%, 65% 88%, 50% 88%, 35% 88%, 6% 88%, 20% 60%, 35% 34%)",
-  "polygon(50% 4%, 73% 27%, 96% 50%, 73% 73%, 50% 96%, 27% 73%, 4% 50%, 27% 27%, 38% 15%, 50% 4%)",
+  "polygon(12% 12%, 88% 12%, 88% 88%, 12% 88%)",
+  "polygon(50% 6%, 94% 88%, 6% 88%)",
+  "polygon(50% 4%, 93% 27%, 93% 73%, 50% 96%, 7% 73%, 7% 27%)",
+  "polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%)",
+  "polygon(50% 4%, 95% 38%, 78% 92%, 22% 92%, 5% 38%)",
   "polygon(50% 3%, 63% 35%, 97% 38%, 71% 59%, 79% 93%, 50% 73%, 21% 93%, 29% 59%, 3% 38%, 37% 35%)",
 ];
 
@@ -30,115 +32,94 @@ const DOT_COLORS = [
   ACCENT_HEX.mint,
 ];
 
-const ROPE_NODES = 12;
+const ROPE_NODES = 13;
+
+interface Ball {
+  el: HTMLDivElement;
+  face: HTMLDivElement;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  shapeIdx: number;
+  colorIdx: number;
+}
+
+interface HitBox {
+  el: HTMLElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: "letter" | "bump";
+  cooldownUntil: number;
+}
+
+const BTN_BUMP: Keyframe[] = [
+  { transform: "rotate(0deg)" },
+  { transform: "rotate(-4deg)" },
+  { transform: "rotate(3deg)" },
+  { transform: "rotate(0deg)" },
+];
+
+const LETTER_HOP: Keyframe[] = [
+  { transform: "translateY(0)" },
+  { transform: "translateY(-16%)" },
+  { transform: "translateY(0)" },
+];
 
 export function HeroSection() {
   const [bops, setBops] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [ulDrawn, setUlDrawn] = useState(false);
+  const [bopsVisible, setBopsVisible] = useState(false);
 
   const heroRef = useRef<HTMLElement>(null);
   const copyRef = useRef<HTMLDivElement>(null);
   const h1Ref = useRef<HTMLHeadingElement>(null);
-  const dotRef = useRef<HTMLDivElement>(null);
+  const stopPeriodRef = useRef<HTMLSpanElement>(null);
+  const dotLayerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const badgeWrapRef = useRef<HTMLDivElement>(null);
   const strapPathRef = useRef<SVGPathElement>(null);
   const strapShadowRef = useRef<SVGPathElement>(null);
   const strapTextRef = useRef<SVGTextPathElement>(null);
+  const flipImpulseRef = useRef<() => void>(() => {});
 
-  // Entrance timeline triggered when preloader finishes
-  useEffect(() => {
-    const { gsap } = ensureGsap();
-    const reduced = prefersReducedMotion();
-    let entered = false;
-
-    const runEnter = () => {
-      if (entered) return;
-      entered = true;
-
-      const chars = h1Ref.current?.querySelectorAll(".hero-char");
-      const fadeItems = copyRef.current?.querySelectorAll(".hero-fade");
-
-      if (reduced) {
-        if (chars) gsap.set(chars, { yPercent: 0, opacity: 1 });
-        if (fadeItems) gsap.set(fadeItems, { y: 0, opacity: 1 });
-        if (dotRef.current) gsap.set(dotRef.current, { scale: 1, opacity: 1 });
-        return;
-      }
-
-      if (chars && chars.length) {
-        stampIn(chars, { delay: 0.08, stagger: 0.035, duration: 0.6 });
-      }
-      if (fadeItems && fadeItems.length) {
-        gsap.fromTo(
-          fadeItems,
-          { y: 18, opacity: 0 },
-          {
-            y: 0,
-            opacity: 1,
-            duration: 0.7,
-            stagger: 0.07,
-            ease: "power3.out",
-            delay: 0.28,
-          }
-        );
-      }
-
-      if (dotRef.current) {
-        gsap.fromTo(
-          dotRef.current,
-          { scale: 0, opacity: 0 },
-          {
-            scale: 1,
-            opacity: 1,
-            duration: 0.45,
-            ease: "back.out(3)",
-            delay: 1.2,
-            onComplete: () => {
-              if (!dotRef.current) return;
-              gsap
-                .timeline()
-                .to(dotRef.current, {
-                  scaleX: 1.35,
-                  scaleY: 0.65,
-                  duration: 0.14,
-                  ease: "power2.out",
-                })
-                .to(dotRef.current, {
-                  scaleX: 1,
-                  scaleY: 1,
-                  duration: 0.22,
-                  ease: "back.out(2)",
-                });
-            },
-          }
-        );
-      }
-    };
-
-    const onDone = () => runEnter();
-    window.addEventListener("preloader:done", onDone);
-    const fallback = window.setTimeout(runEnter, 3600);
-
-    return () => {
-      window.removeEventListener("preloader:done", onDone);
-      window.clearTimeout(fallback);
-    };
-  }, []);
-
-  // Verlet Rope Lanyard + Bouncy Dot Physics
+  // Combined Hero Entry + Verlet Lanyard + Multi-Dot Physics
   useEffect(() => {
     const heroEl = heroRef.current;
+    const copyEl = copyRef.current;
+    const h1El = h1Ref.current;
+    const dotLayer = dotLayerRef.current;
     const stageEl = stageRef.current;
     const badgeEl = badgeWrapRef.current;
-    const dotEl = dotRef.current;
     const strapPath = strapPathRef.current;
     const strapShadow = strapShadowRef.current;
     const strapText = strapTextRef.current;
 
-    if (!heroEl || !stageEl || !badgeEl || !strapPath || !strapShadow) return;
-    if (prefersReducedMotion()) return;
+    if (!heroEl || !copyEl || !h1El || !dotLayer || !stageEl || !badgeEl || !strapPath || !strapShadow) {
+      return;
+    }
 
+    const { gsap } = ensureGsap();
+    const reduced = prefersReducedMotion();
+
+    // If reduced motion: show everything immediately cleanly
+    if (reduced) {
+      const chars = h1El.querySelectorAll(".hero-char");
+      const fadeItems = copyEl.querySelectorAll(".hero-fade");
+      gsap.set(chars, { yPercent: 0, opacity: 1 });
+      gsap.set(fadeItems, { y: 0, opacity: 1 });
+      const id = window.setTimeout(() => {
+        setUlDrawn(true);
+        setBopsVisible(true);
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
+
+    // ==================== 1. VERLET ROPE STATE ====================
     const G = 1900;
     const DT = 1 / 120;
     const DAMP = 0.986;
@@ -149,7 +130,7 @@ export function HeroSection() {
     const ox = new Float32Array(ROPE_NODES);
     const oy = new Float32Array(ROPE_NODES);
 
-    const getSegLen = () => (window.innerWidth <= 760 ? 6.5 : 9.5);
+    const getSegLen = () => (window.innerWidth <= 760 ? 5.2 : 9.2);
 
     const initRope = () => {
       const w = stageEl.clientWidth || 320;
@@ -159,8 +140,7 @@ export function HeroSection() {
         px[i] = ox[i] = ax + Math.sin(i * 0.25) * 3;
         py[i] = oy[i] = i * seg;
       }
-      // Initial slight pendulum kick
-      ox[ROPE_NODES - 1] -= 16;
+      ox[ROPE_NODES - 1] -= 18;
     };
     initRope();
 
@@ -169,15 +149,25 @@ export function HeroSection() {
     let dragY = 0;
     let pointerDownTime = 0;
     let pointerMoved = false;
+    const trail: { x: number; y: number; t: number }[] = [];
+    let badgeTilt = 0;
+    let lastScrollY = window.scrollY;
+    let lastScrollAt = 0;
+
+    flipImpulseRef.current = () => {
+      ox[ROPE_NODES - 1] += (Math.random() - 0.5) * 12;
+    };
 
     const onBadgePointerDown = (e: PointerEvent) => {
       if ((e.target as HTMLElement).closest("button")) return;
       dragging = true;
       pointerMoved = false;
       pointerDownTime = performance.now();
+      trail.length = 0;
       const rect = stageEl.getBoundingClientRect();
       dragX = e.clientX - rect.left;
       dragY = e.clientY - rect.top;
+      trail.push({ x: dragX, y: dragY, t: pointerDownTime });
       badgeEl.setPointerCapture?.(e.pointerId);
     };
 
@@ -186,9 +176,12 @@ export function HeroSection() {
       const rect = stageEl.getBoundingClientRect();
       const nx = e.clientX - rect.left;
       const ny = e.clientY - rect.top;
-      if (Math.hypot(nx - dragX, ny - dragY) > 5) pointerMoved = true;
+      if (Math.hypot(nx - dragX, ny - dragY) >= 5) pointerMoved = true;
       dragX = nx;
       dragY = ny;
+      const now = performance.now();
+      trail.push({ x: nx, y: ny, t: now });
+      while (trail.length > 2 && now - trail[0].t > 90) trail.shift();
     };
 
     const onPointerUp = () => {
@@ -196,93 +189,329 @@ export function HeroSection() {
       dragging = false;
       if (!pointerMoved && performance.now() - pointerDownTime < 260) {
         setFlipped((f) => !f);
+        flipImpulseRef.current();
+        return;
+      }
+      if (trail.length >= 2) {
+        const first = trail[0];
+        const last = trail[trail.length - 1];
+        const dtMs = Math.max(16, last.t - first.t);
+        const MAX = 1800;
+        const tvx = Math.max(-MAX, Math.min(MAX, ((last.x - first.x) / dtMs) * 1000));
+        const tvy = Math.max(-MAX, Math.min(MAX, ((last.y - first.y) / dtMs) * 1000));
+        ox[ROPE_NODES - 1] = px[ROPE_NODES - 1] - tvx * DT * 0.8;
+        oy[ROPE_NODES - 1] = py[ROPE_NODES - 1] - tvy * DT * 0.8;
+      }
+    };
+
+    const onWindowScroll = () => {
+      const now = performance.now();
+      const dy = window.scrollY - lastScrollY;
+      lastScrollY = window.scrollY;
+      if (now - lastScrollAt > 400 && !dragging && Math.abs(dy) > 2) {
+        lastScrollAt = now;
+        const kick = Math.min(18, Math.abs(dy) * 0.35) * DT * 1.2 * Math.sign(dy);
+        oy[ROPE_NODES - 1] += kick;
+        ox[ROPE_NODES - 1] += kick * 0.6;
       }
     };
 
     badgeEl.addEventListener("pointerdown", onBadgePointerDown);
     window.addEventListener("pointermove", onStagePointerMove);
     window.addEventListener("pointerup", onPointerUp);
+    window.addEventListener("scroll", onWindowScroll, { passive: true });
 
-    // Bouncy dot state (spawn clear of the hanging badge on mobile & desktop)
-    const heroRect0 = heroEl.getBoundingClientRect();
-    let dx = window.innerWidth <= 760 ? 36 : Math.max(40, heroRect0.width * 0.25);
-    let dy =
-      window.innerWidth <= 760
-        ? Math.max(490, heroRect0.height - 180)
-        : Math.max(60, heroRect0.height * 0.22);
-    let vx = 170;
-    let vy = 115;
-    const R = 10;
-    let dotShapeIdx = 0;
-    let lastBopAt = 0;
-    let mouseX = -9999;
-    let mouseY = -9999;
+    // ==================== 2. MULTI-DOT & HITBOX STATE ====================
+    const balls: Ball[] = [];
+    const timers: number[] = [];
+    const maxBalls = window.matchMedia("(pointer: fine)").matches ? 5 : 3;
+    let hitBoxes: HitBox[] = [];
+    let live = false;
+    let batX = -9999;
+    let batY = -9999;
+    let batVx = 0;
+    let batVy = 0;
+    let lastBatT = performance.now();
     let strapOffset = 0;
 
-    const triggerBop = (extraImpulseX = 0, extraImpulseY = 0) => {
-      const now = performance.now();
-      if (now - lastBopAt < 90) return;
-      lastBopAt = now;
-      dotShapeIdx = (dotShapeIdx + 1) % DOT_SHAPES.length;
-      if (dotEl) {
-        dotEl.style.clipPath = DOT_SHAPES[dotShapeIdx];
-        dotEl.style.backgroundColor = DOT_COLORS[dotShapeIdx % DOT_COLORS.length];
+    const measureHitBoxes = () => {
+      const hRect = heroEl.getBoundingClientRect();
+      const next: HitBox[] = [];
+      h1El.querySelectorAll<HTMLElement>(".hero-char").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width > 2 && r.height > 2) {
+          next.push({
+            el,
+            x: r.left - hRect.left,
+            y: r.top - hRect.top,
+            w: r.width,
+            h: r.height,
+            kind: "letter",
+            cooldownUntil: 0,
+          });
+        }
+      });
+      copyEl.querySelectorAll<HTMLElement>(".ly-bump").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width > 4 && r.height > 4) {
+          next.push({
+            el,
+            x: r.left - hRect.left,
+            y: r.top - hRect.top,
+            w: r.width,
+            h: r.height,
+            kind: "bump",
+            cooldownUntil: 0,
+          });
+        }
+      });
+      hitBoxes = next;
+    };
+
+    const spawnSparks = (x: number, y: number, color: string) => {
+      for (let i = 0; i < 4; i++) {
+        const sp = document.createElement("span");
+        sp.className = "ly-bit";
+        sp.style.backgroundColor = color;
+        dotLayer.appendChild(sp);
+        const ang = (Math.PI * 2 * i) / 4 + Math.random() * 0.7;
+        const dist = 16 + Math.random() * 18;
+        gsap.fromTo(
+          sp,
+          { x, y, scale: 1, opacity: 1 },
+          {
+            x: x + Math.cos(ang) * dist,
+            y: y + Math.sin(ang) * dist,
+            scale: 0,
+            opacity: 0,
+            duration: 0.5,
+            ease: "power2.out",
+            onComplete: () => sp.remove(),
+          }
+        );
       }
-      vx += extraImpulseX;
-      vy += extraImpulseY;
-      setBops((b) => b + 1);
+    };
+
+    const createBall = (x: number, y: number, vx: number, vy: number, shapeIdx = 0): Ball => {
+      const r = window.innerWidth <= 760 ? 9.5 : 11;
+      const el = document.createElement("div");
+      el.className = "pointer-events-none absolute left-0 top-0 z-20 will-change-transform";
+      el.style.width = `${r * 2}px`;
+      el.style.height = `${r * 2}px`;
+
+      const face = document.createElement("div");
+      face.className = "h-full w-full";
+      face.style.clipPath = DOT_SHAPES[shapeIdx % DOT_SHAPES.length];
+      face.style.backgroundColor = DOT_COLORS[shapeIdx % DOT_COLORS.length];
+      face.style.transition = "clip-path 0.25s ease, background-color 0.25s ease";
+
+      el.appendChild(face);
+      dotLayer.appendChild(el);
+      el.style.transform = `translate3d(${(x - r).toFixed(1)}px, ${(y - r).toFixed(1)}px, 0)`;
+
+      return {
+        el,
+        face,
+        x,
+        y,
+        vx,
+        vy,
+        r,
+        shapeIdx,
+        colorIdx: shapeIdx % DOT_COLORS.length,
+      };
+    };
+
+    const morphBall = (b: Ball) => {
+      b.shapeIdx = (b.shapeIdx + 1) % DOT_SHAPES.length;
+      b.colorIdx = (b.colorIdx + 1) % DOT_COLORS.length;
+      b.face.style.clipPath = DOT_SHAPES[b.shapeIdx];
+      b.face.style.backgroundColor = DOT_COLORS[b.colorIdx];
+      setBops((n) => n + 1);
     };
 
     const onHeroPointerMove = (e: PointerEvent) => {
       const r = heroEl.getBoundingClientRect();
-      mouseX = e.clientX - r.left;
-      mouseY = e.clientY - r.top;
+      const nx = e.clientX - r.left;
+      const ny = e.clientY - r.top;
+      const now = performance.now();
+      const dt = Math.max(0.008, (now - lastBatT) / 1000);
+      if (batX > -900) {
+        batVx = Math.max(-1400, Math.min(1400, (nx - batX) / dt));
+        batVy = Math.max(-1400, Math.min(1400, (ny - batY) / dt));
+      }
+      batX = nx;
+      batY = ny;
+      lastBatT = now;
     };
+
     const onHeroPointerLeave = () => {
-      mouseX = -9999;
-      mouseY = -9999;
+      batX = -9999;
+      batY = -9999;
+      batVx = 0;
+      batVy = 0;
     };
+
     const onHeroClick = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest("a, button")) return;
+      if (!live) return;
+      if ((e.target as HTMLElement).closest("a, button, #ly-badge")) return;
       const r = heroEl.getBoundingClientRect();
       const cx = e.clientX - r.left;
       const cy = e.clientY - r.top;
-      const ang = Math.atan2(dy - cy, dx - cx);
-      vx = Math.cos(ang) * 320;
-      vy = Math.sin(ang) * 320 - 80;
-      triggerBop();
+      const speed = Math.max(240, Math.min(400, heroEl.clientWidth * 0.26));
+      const ang = -Math.PI * (0.15 + Math.random() * 0.7);
+      const b = createBall(
+        cx,
+        cy,
+        Math.cos(ang) * speed,
+        Math.sin(ang) * speed,
+        Math.floor(Math.random() * DOT_SHAPES.length)
+      );
+      balls.push(b);
+      gsap.from(b.face, { scale: 0, duration: 0.4, ease: "back.out(3)" });
+      setBops((n) => n + 1);
+
+      if (balls.length > maxBalls) {
+        const old = balls.shift();
+        if (old) {
+          gsap.to(old.face, {
+            scale: 0,
+            duration: 0.25,
+            onComplete: () => old.el.remove(),
+          });
+        }
+      }
     };
 
     heroEl.addEventListener("pointermove", onHeroPointerMove);
     heroEl.addEventListener("pointerleave", onHeroPointerLeave);
     heroEl.addEventListener("click", onHeroClick);
 
+    // ==================== 3. HERO ENTRY SEQUENCE ====================
+    let entered = false;
+    const runEnter = () => {
+      if (entered) return;
+      entered = true;
+
+      const chars = h1El.querySelectorAll(".hero-char");
+      const fadeItems = copyEl.querySelectorAll(".hero-fade");
+
+      // 0.15s: stampIn hero name letters
+      if (chars.length) {
+        stampIn(chars, { delay: 0.15, stagger: 0.035, duration: 0.6 });
+      }
+
+      // 0.50s: staggered fade-up of subhead, CTAs, socials, hint
+      if (fadeItems.length) {
+        gsap.fromTo(
+          fadeItems,
+          { y: 18, opacity: 0 },
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.7,
+            stagger: 0.07,
+            ease: "power3.out",
+            delay: 0.5,
+          }
+        );
+      }
+
+      // 1.00s: spawn initial dot near the period of leadHighlight
+      timers.push(
+        window.setTimeout(() => {
+          const hRect = heroEl.getBoundingClientRect();
+          const pRect = stopPeriodRef.current?.getBoundingClientRect();
+          const sx = pRect ? pRect.right - hRect.left + 8 : Math.max(40, hRect.width * 0.25);
+          const sy = pRect ? pRect.bottom - hRect.top - 10 : Math.max(80, hRect.height * 0.45);
+          const initial = createBall(sx, sy, 0, 0, 0);
+          balls.push(initial);
+          gsap.fromTo(
+            initial.face,
+            { scale: 0 },
+            { scale: 1, duration: 0.45, ease: "back.out(3)" }
+          );
+        }, 1000)
+      );
+
+      // 1.30s: draw sweeping underline
+      timers.push(window.setTimeout(() => setUlDrawn(true), 1300));
+
+      // 2.00s: squash dot on period -> 2.14s spring & launch
+      timers.push(
+        window.setTimeout(() => {
+          const first = balls[0];
+          if (!first) return;
+          measureHitBoxes();
+          gsap
+            .timeline()
+            .to(first.face, {
+              scaleX: 1.35,
+              scaleY: 0.65,
+              duration: 0.14,
+              ease: "power2.in",
+            })
+            .to(first.face, {
+              scaleX: 1,
+              scaleY: 1,
+              duration: 0.3,
+              ease: "back.out(3)",
+              onStart: () => {
+                const s = Math.max(240, Math.min(400, heroEl.clientWidth * 0.26));
+                first.vx = -s * 0.55;
+                first.vy = -s * 0.84;
+                live = true;
+                setBopsVisible(true);
+              },
+            });
+        }, 2000)
+      );
+    };
+
+    const onPreloaderDone = () => runEnter();
+    window.addEventListener("preloader:done", onPreloaderDone);
+    if (document.documentElement.classList.contains("lifted")) {
+      runEnter();
+    } else {
+      timers.push(window.setTimeout(runEnter, 2700));
+    }
+
+    const onResize = () => {
+      if (entered) measureHitBoxes();
+    };
+    window.addEventListener("resize", onResize);
+
+    // ==================== 4. MAIN PHYSICS LOOP ====================
     let active = true;
     let lastTime = performance.now();
     let acc = 0;
     let rafId = 0;
 
-    const stepRope = (ax: number) => {
+    const stepRope = (ax: number, timeSec: number) => {
       px[0] = ox[0] = ax;
-      py[0] = ox[0] * 0; // 0
       py[0] = oy[0] = 0;
+
+      // Ambient breeze matching reference
+      const breeze = !dragging
+        ? (Math.sin(timeSec * 0.9) * 14 + Math.sin(timeSec * 2.3) * 6) * DT * DT
+        : 0;
 
       for (let i = 1; i < ROPE_NODES; i++) {
         const vxNode = (px[i] - ox[i]) * DAMP;
         const vyNode = (py[i] - oy[i]) * DAMP;
         ox[i] = px[i];
         oy[i] = py[i];
-        px[i] += vxNode;
+        px[i] += vxNode + (i === ROPE_NODES - 1 ? breeze : 0);
         py[i] += vyNode + G * DT * DT;
       }
 
       if (dragging) {
         px[ROPE_NODES - 1] = dragX;
-        py[ROPE_NODES - 1] = Math.max(40, Math.min(240, dragY - 40));
+        py[ROPE_NODES - 1] = Math.max(36, Math.min(240, dragY - 40));
       }
 
+      const seg = getSegLen();
       for (let iter = 0; iter < ITER; iter++) {
-        const seg = getSegLen();
         px[0] = ax;
         py[0] = 0;
         for (let i = 0; i < ROPE_NODES - 1; i++) {
@@ -308,18 +537,17 @@ export function HeroSection() {
       const elapsed = Math.min(0.05, (now - lastTime) / 1000);
       lastTime = now;
 
-      // 1. Step Verlet rope
+      // Step Verlet rope
       const stageW = stageEl.clientWidth || 320;
       const ax = stageW / 2;
       acc += elapsed;
       let steps = 0;
       while (acc >= DT && steps < 4) {
-        stepRope(ax);
+        stepRope(ax, now / 1000);
         acc -= DT;
         steps++;
       }
 
-      // Render rope SVG
       let d = `M ${px[0].toFixed(1)} ${py[0].toFixed(1)}`;
       for (let i = 1; i < ROPE_NODES - 1; i++) {
         const xc = (px[i] + px[i + 1]) * 0.5;
@@ -330,105 +558,166 @@ export function HeroSection() {
       strapPath.setAttribute("d", d);
       strapShadow.setAttribute("d", d);
 
-      // Scroll strap text
-      strapOffset = (strapOffset + elapsed * 18) % 100;
+      strapOffset = (strapOffset + elapsed * 14) % 100;
       if (strapText) {
         strapText.setAttribute("startOffset", `${strapOffset.toFixed(1)}%`);
       }
 
-      // Position badge from bottom rope segment with natural ~-3deg rest tilt
       const tipX = px[ROPE_NODES - 1];
       const tipY = py[ROPE_NODES - 1];
       const prevX = px[ROPE_NODES - 3];
       const prevY = py[ROPE_NODES - 3];
       const angleRad = Math.atan2(tipX - prevX, tipY - prevY);
-      const angleDeg = Math.max(-28, Math.min(28, -(angleRad * 180) / Math.PI - 2.6));
-      badgeEl.style.transform = `translate3d(${(tipX - stageW / 2).toFixed(1)}px, ${tipY.toFixed(1)}px, 0) rotate(${angleDeg.toFixed(2)}deg)`;
+      const angleDeg = Math.max(-28, Math.min(28, -(angleRad * 180) / Math.PI - 2.4));
 
-      // 2. Step bouncy dot
-      if (dotEl) {
+      const targetTilt = Math.max(-28, Math.min(28, (tipX - ox[ROPE_NODES - 1]) * 3.2));
+      badgeTilt += (targetTilt - badgeTilt) * 0.14;
+
+      badgeEl.style.transform = `translate3d(${(tipX - stageW / 2).toFixed(1)}px, ${tipY.toFixed(1)}px, 0) rotate(${angleDeg.toFixed(2)}deg) perspective(900px) rotateY(${badgeTilt.toFixed(2)}deg)`;
+
+      // Step all active balls when live
+      if (live && balls.length) {
         const hw = heroEl.clientWidth;
         const hh = heroEl.clientHeight;
-        vy += 320 * elapsed; // light gravity
-        dx += vx * elapsed;
-        dy += vy * elapsed;
-
-        if (dx < R + 12) {
-          dx = R + 12;
-          vx = Math.abs(vx) * 0.94 + 20;
-          triggerBop();
-        } else if (dx > hw - R - 12) {
-          dx = hw - R - 12;
-          vx = -Math.abs(vx) * 0.94 - 20;
-          triggerBop();
-        }
-        if (dy < R + 12) {
-          dy = R + 12;
-          vy = Math.abs(vy) * 0.92;
-          triggerBop();
-        } else if (dy > hh - R - 26) {
-          dy = hh - R - 26;
-          vy = -Math.max(220, Math.abs(vy) * 0.9);
-          triggerBop();
-        }
-
-        // Cursor collision
-        const distMouse = Math.hypot(dx - mouseX, dy - mouseY);
-        if (distMouse < 44 && distMouse > 0.1) {
-          const nx = (dx - mouseX) / distMouse;
-          const ny = (dy - mouseY) / distMouse;
-          dx = mouseX + nx * 44;
-          dy = mouseY + ny * 44;
-          vx = nx * 280;
-          vy = ny * 280 - 60;
-          triggerBop();
-        }
-
-        // Badge collision: eject dot cleanly to nearest AABB edge + gentle lanyard nudge
         const bRect = badgeEl.getBoundingClientRect();
         const hRect = heroEl.getBoundingClientRect();
         const bx = bRect.left - hRect.left;
         const by = bRect.top - hRect.top;
         const bw = bRect.width;
         const bh = bRect.height;
-        if (
-          dx + R > bx &&
-          dx - R < bx + bw &&
-          dy + R > by &&
-          dy - R < by + bh
-        ) {
-          const penLeft = dx + R - bx;
-          const penRight = bx + bw - (dx - R);
-          const penTop = dy + R - by;
-          const penBottom = by + bh - (dy - R);
-          const minPen = Math.min(penLeft, penRight, penTop, penBottom);
 
-          if (minPen === penLeft) {
-            dx = bx - R - 2;
-            vx = -Math.max(160, Math.abs(vx));
-            ox[ROPE_NODES - 1] -= 2.5;
-          } else if (minPen === penRight) {
-            dx = bx + bw + R + 2;
-            vx = Math.max(160, Math.abs(vx));
-            ox[ROPE_NODES - 1] += 2.5;
-          } else if (minPen === penTop) {
-            dy = by - R - 2;
-            vy = -Math.max(180, Math.abs(vy));
-          } else {
-            dy = by + bh + R + 2;
-            vy = Math.max(180, Math.abs(vy));
+        for (const b of balls) {
+          b.vy += 320 * elapsed;
+          b.x += b.vx * elapsed;
+          b.y += b.vy * elapsed;
+
+          // Hero boundaries
+          if (b.x < b.r + 10) {
+            b.x = b.r + 10;
+            b.vx = Math.abs(b.vx) * 0.94 + 20;
+            morphBall(b);
+          } else if (b.x > hw - b.r - 10) {
+            b.x = hw - b.r - 10;
+            b.vx = -Math.abs(b.vx) * 0.94 - 20;
+            morphBall(b);
           }
-          triggerBop();
-        }
+          if (b.y < b.r + 10) {
+            b.y = b.r + 10;
+            b.vy = Math.abs(b.vy) * 0.92;
+            morphBall(b);
+          } else if (b.y > hh - b.r - 14) {
+            const impactVy = Math.abs(b.vy);
+            b.y = hh - b.r - 14;
+            b.vy = -Math.max(240, impactVy * 0.92);
+            morphBall(b);
+            window.dispatchEvent(
+              new CustomEvent("hero:wave-poke", {
+                detail: {
+                  clientX: hRect.left + b.x,
+                  impulse: Math.min(700, impactVy) * 0.015,
+                },
+              })
+            );
+          }
 
-        // Clamp speed
-        const speed = Math.hypot(vx, vy);
-        if (speed > 440) {
-          vx = (vx / speed) * 440;
-          vy = (vy / speed) * 440;
-        }
+          // Mouse bat (r = 24)
+          if (batX > -900) {
+            const distM = Math.hypot(b.x - batX, b.y - batY);
+            if (distM < 24 + b.r && distM > 0.1) {
+              const nx = (b.x - batX) / distM;
+              const ny = (b.y - batY) / distM;
+              b.x = batX + nx * (24 + b.r);
+              b.y = batY + ny * (24 + b.r);
+              b.vx = nx * 280 + batVx * 0.35;
+              b.vy = ny * 280 + batVy * 0.35;
+              morphBall(b);
+            }
+          }
 
-        dotEl.style.transform = `translate3d(${(dx - R).toFixed(1)}px, ${(dy - R).toFixed(1)}px, 0)`;
+          // Swinging ID badge clean AABB edge collision
+          if (
+            b.x + b.r > bx &&
+            b.x - b.r < bx + bw &&
+            b.y + b.r > by &&
+            b.y - b.r < by + bh
+          ) {
+            const pL = b.x + b.r - bx;
+            const pR = bx + bw - (b.x - b.r);
+            const pT = b.y + b.r - by;
+            const pB = by + bh - (b.y - b.r);
+            const minP = Math.min(pL, pR, pT, pB);
+
+            if (minP === pL) {
+              b.x = bx - b.r - 2;
+              b.vx = -Math.max(170, Math.abs(b.vx));
+              ox[ROPE_NODES - 1] -= 2.2;
+            } else if (minP === pR) {
+              b.x = bx + bw + b.r + 2;
+              b.vx = Math.max(170, Math.abs(b.vx));
+              ox[ROPE_NODES - 1] += 2.2;
+            } else if (minP === pT) {
+              b.y = by - b.r - 2;
+              b.vy = -Math.max(190, Math.abs(b.vy));
+            } else {
+              b.y = by + bh + b.r + 2;
+              b.vy = Math.max(190, Math.abs(b.vy));
+            }
+            morphBall(b);
+          }
+
+          // Letter & CTA button collisions
+          for (const hb of hitBoxes) {
+            if (now < hb.cooldownUntil) continue;
+            if (
+              b.x + b.r > hb.x &&
+              b.x - b.r < hb.x + hb.w &&
+              b.y + b.r > hb.y &&
+              b.y - b.r < hb.y + hb.h
+            ) {
+              hb.cooldownUntil = now + 180;
+              const pL = b.x + b.r - hb.x;
+              const pR = hb.x + hb.w - (b.x - b.r);
+              const pT = b.y + b.r - hb.y;
+              const pB = hb.y + hb.h - (b.y - b.r);
+              const m = Math.min(pL, pR, pT, pB);
+              if (m === pL || m === pR) b.vx = -b.vx;
+              else b.vy = -b.vy;
+
+              const color = DOT_COLORS[b.colorIdx];
+              morphBall(b);
+
+              if (hb.kind === "letter") {
+                hb.el.animate?.(LETTER_HOP, {
+                  duration: 520,
+                  easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+                });
+                const prevColor = hb.el.style.color;
+                hb.el.style.color = color;
+                timers.push(
+                  window.setTimeout(() => {
+                    hb.el.style.color = prevColor;
+                  }, 320)
+                );
+                spawnSparks(b.x, b.y, color);
+              } else {
+                hb.el.animate?.(BTN_BUMP, {
+                  duration: 360,
+                  easing: "ease-out",
+                });
+              }
+              break;
+            }
+          }
+
+          // Clamp speed <= 1100
+          const sp = Math.hypot(b.vx, b.vy);
+          if (sp > 1100) {
+            b.vx = (b.vx / sp) * 1100;
+            b.vy = (b.vy / sp) * 1100;
+          }
+
+          b.el.style.transform = `translate3d(${(b.x - b.r).toFixed(1)}px, ${(b.y - b.r).toFixed(1)}px, 0)`;
+        }
       }
 
       rafId = window.requestAnimationFrame(tick);
@@ -439,9 +728,14 @@ export function HeroSection() {
     return () => {
       active = false;
       window.cancelAnimationFrame(rafId);
+      timers.forEach((id) => window.clearTimeout(id));
+      balls.forEach((b) => b.el.remove());
+      window.removeEventListener("preloader:done", onPreloaderDone);
+      window.removeEventListener("resize", onResize);
       badgeEl.removeEventListener("pointerdown", onBadgePointerDown);
       window.removeEventListener("pointermove", onStagePointerMove);
       window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("scroll", onWindowScroll);
       heroEl.removeEventListener("pointermove", onHeroPointerMove);
       heroEl.removeEventListener("pointerleave", onHeroPointerLeave);
       heroEl.removeEventListener("click", onHeroClick);
@@ -457,16 +751,11 @@ export function HeroSection() {
       ref={heroRef}
       className="relative overflow-hidden bg-[var(--paper)] pt-4 pb-8 min-[761px]:min-h-[calc(100svh-var(--bar)-56px)] min-[761px]:py-8 flex items-center"
     >
-      {/* Interactive Bouncy Morphing Dot */}
+      {/* Dynamic Bouncy Dots & Sparks Layer */}
       <div
-        ref={dotRef}
+        ref={dotLayerRef}
+        className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
         aria-hidden="true"
-        className="pointer-events-none absolute left-0 top-0 z-20 h-[20px] w-[20px] opacity-0 shadow-sm"
-        style={{
-          clipPath: DOT_SHAPES[0],
-          backgroundColor: DOT_COLORS[0],
-          transition: "clip-path 0.25s ease, background-color 0.25s ease",
-        }}
       />
 
       <div className="shell relative z-10 grid grid-cols-1 min-[761px]:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-center gap-6 min-[761px]:gap-8">
@@ -484,7 +773,7 @@ export function HeroSection() {
               {firstChars.map((ch, i) => (
                 <span
                   key={`fn-${i}`}
-                  className="hero-char inline-block opacity-0"
+                  className="hero-char inline-block opacity-0 transition-colors duration-200"
                 >
                   {ch === " " ? "\u00A0" : ch}
                 </span>
@@ -494,7 +783,7 @@ export function HeroSection() {
               {lastChars.map((ch, i) => (
                 <span
                   key={`ln-${i}`}
-                  className="hero-char inline-block opacity-0"
+                  className="hero-char inline-block opacity-0 transition-colors duration-200"
                 >
                   {ch === " " ? "\u00A0" : ch}
                 </span>
@@ -505,7 +794,12 @@ export function HeroSection() {
           <p className="hero-fade mt-5 mx-auto min-[761px]:mx-0 max-w-[34ch] font-display text-[clamp(1.35rem,0.9rem+1.4vw,2.2rem)] leading-[1.16] tracking-[-0.02em] text-[var(--ink-soft)] opacity-0">
             {HERO_CONTENT.leadPrefix}
             <strong className="font-extrabold text-[var(--ink)]">
-              {HERO_CONTENT.leadHighlight}
+              <span
+                ref={stopPeriodRef}
+                className={`ly-ul ${ulDrawn ? "is-drawn" : ""}`}
+              >
+                {HERO_CONTENT.leadHighlight}
+              </span>
             </strong>
           </p>
 
@@ -517,7 +811,7 @@ export function HeroSection() {
                 e.preventDefault();
                 scrollToSection(HERO_CONTENT.primaryCta.href);
               }}
-              className="pill-btn pill-primary"
+              className="ly-bump pill-btn pill-primary"
             >
               {HERO_CONTENT.primaryCta.label}
             </a>
@@ -527,7 +821,7 @@ export function HeroSection() {
                 e.preventDefault();
                 scrollToSection(HERO_CONTENT.secondaryCta.href);
               }}
-              className="pill-btn pill-secondary"
+              className="ly-bump pill-btn pill-secondary"
             >
               {HERO_CONTENT.secondaryCta.label}
             </a>
@@ -541,7 +835,7 @@ export function HeroSection() {
                 href={s.href}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="social-pill"
+                className="ly-bump social-pill"
               >
                 <span>{s.label}</span>
                 <span aria-hidden="true">↗</span>
@@ -557,7 +851,12 @@ export function HeroSection() {
             <span className="inline min-[761px]:hidden">
               {HERO_CONTENT.bopHintTouch}
             </span>
-            <span className="font-bold text-[var(--pink-ink)]">
+            <span
+              id="ly-bops-wrap"
+              className={`font-bold text-[var(--pink-ink)] transition-opacity duration-300 ${
+                bopsVisible ? "opacity-100" : "opacity-0"
+              }`}
+            >
               {bops} {UI_LABELS.bopsUnit}
             </span>
           </div>
@@ -567,7 +866,7 @@ export function HeroSection() {
         <div
           ref={stageRef}
           id="ly-badge-stage"
-          className="order-1 min-[761px]:order-2 relative mx-auto h-[465px] min-[761px]:h-[560px] w-full max-w-[360px] select-none"
+          className="order-1 min-[761px]:order-2 relative mx-auto h-[495px] min-[761px]:h-[560px] w-full max-w-[360px] select-none"
         >
           {/* Verlet Rope Strap SVG */}
           <svg
@@ -582,7 +881,7 @@ export function HeroSection() {
               href="#ly-strap-shadow"
               fill="none"
               stroke="rgba(19,17,26,0.16)"
-              strokeWidth="32"
+              strokeWidth="28"
               strokeLinecap="round"
               transform="translate(3,4)"
             />
@@ -590,16 +889,16 @@ export function HeroSection() {
               href="#ly-strap-path"
               fill="none"
               stroke="#E0206A"
-              strokeWidth="30"
+              strokeWidth="26"
               strokeLinecap="round"
             />
             <text
-              fill="#FFFFFF"
-              fontSize="9.5"
+              fill="#FCFBF8"
+              fontSize="10"
               fontFamily="var(--mono)"
               fontWeight="700"
               letterSpacing="1.8"
-              dy="3.2"
+              dy="3.4"
             >
               <textPath ref={strapTextRef} href="#ly-strap-path" startOffset="0%">
                 {HERO_CONTENT.badge.strapText.repeat(3)}
@@ -607,53 +906,35 @@ export function HeroSection() {
             </text>
           </svg>
 
-          {/* Swinging Badge Card */}
+          {/* Swinging Badge Card with Reference Rounded Metallic Clip (::before) */}
           <div
             ref={badgeWrapRef}
             id="ly-badge"
-            className="absolute left-1/2 top-0 -ml-[121px] w-[242px] min-[761px]:-ml-[157.5px] min-[761px]:w-[315px] cursor-grab active:cursor-grabbing"
+            className="ly-badge-clip absolute left-1/2 top-0 -ml-[121px] w-[242px] min-[761px]:-ml-[152px] min-[761px]:w-[304px] cursor-grab active:cursor-grabbing"
             style={{
               transformOrigin: "50% 0%",
-              transform: "rotate(-2.6deg)",
+              transform: "rotate(-2.4deg)",
             }}
           >
-            {/* 3D Cylindrical Metallic Silver Clip SVG */}
-            <div className="relative z-10 mx-auto -mb-3 flex w-16 flex-col items-center">
-              <svg width="56" height="36" viewBox="0 0 56 36" fill="none" aria-hidden="true">
-                <defs>
-                  <linearGradient id="clip-cyl" x1="0" y1="0" x2="1" y2="0">
-                    <stop offset="0%" stopColor="#A9A69E" />
-                    <stop offset="35%" stopColor="#F5F3EE" />
-                    <stop offset="75%" stopColor="#CFCBC2" />
-                    <stop offset="100%" stopColor="#8B8880" />
-                  </linearGradient>
-                </defs>
-                <rect x="15" y="2" width="26" height="10" rx="5" fill="url(#clip-cyl)" stroke="#13111A" strokeWidth="1.5" />
-                <rect x="22" y="10" width="12" height="10" rx="3" fill="url(#clip-cyl)" stroke="#13111A" strokeWidth="1.5" />
-                <path d="M19 18 H37 L41 33 H15 L19 18 Z" fill="url(#clip-cyl)" stroke="#13111A" strokeWidth="1.5" strokeLinejoin="round" />
-                <circle cx="28" cy="26" r="2.5" fill="#13111A" />
-              </svg>
-            </div>
-
-            {/* 3D Flip Card */}
+            {/* 3D Flip Card (0.8s cubic-bezier(.22,1,.36,1)) */}
             <div
-              className="relative w-full transition-transform duration-500"
+              className="relative w-full transition-transform duration-[800ms]"
               style={{
                 transformStyle: "preserve-3d",
                 transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
                 transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)",
               }}
             >
-              {/* Front Face (Borderless + 1:1 Square Photo + Protruding Flip Button) */}
+              {/* Front Face */}
               <div
-                className="relative rounded-[20px] bg-[var(--card)] p-4 sm:p-[22px] shadow-[0_30px_50px_-30px_rgba(19,17,26,0.55)]"
+                className="relative rounded-[18px] bg-[var(--card)] p-4 sm:p-[18px] shadow-[0_30px_50px_-30px_rgba(19,17,26,0.55)]"
                 style={{ backfaceVisibility: "hidden" }}
               >
                 <div className="flex items-center justify-between gap-2">
+                  <span className="h-2.5 w-8 rounded-full border border-[var(--hair)] bg-[var(--paper)]" />
                   <span className="rounded-full bg-[var(--pink)] px-2.5 py-0.5 mono text-[0.65rem] font-bold tracking-wider text-white">
                     {HERO_CONTENT.badge.topPill}
                   </span>
-                  <span className="h-2.5 w-8 rounded-full border border-[var(--hair)] bg-[var(--paper)]" />
                 </div>
 
                 <div className="mt-3 overflow-hidden rounded-[12px] bg-[#DCD9D0] aspect-square">
@@ -674,59 +955,65 @@ export function HeroSection() {
                 </div>
 
                 <div className="mt-2.5 inline-flex items-center gap-1.5 rounded-full border border-[var(--hair)] bg-[var(--paper)] px-2.5 py-1 mono text-[0.62rem] font-semibold text-[var(--ink-soft)]">
-                  <span className="h-2 w-2 rounded-full bg-[var(--mint)]" />
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--mint)] opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--mint)]" />
+                  </span>
                   <span>{HERO_CONTENT.badge.statusPill}</span>
                 </div>
 
                 <div className="mt-3 pt-2.5 border-t border-[var(--hair-soft)]">
-                  {/* Original Inline Barcode SVG */}
-                  <svg width="112" height="20" viewBox="0 0 112 20" fill="none" aria-hidden="true">
-                    <rect x="0" y="1" width="3" height="18" fill="#13111A" />
-                    <rect x="5" y="1" width="1.5" height="18" fill="#13111A" />
-                    <rect x="9" y="1" width="4" height="18" fill="#13111A" />
-                    <rect x="16" y="1" width="2" height="18" fill="#13111A" />
-                    <rect x="21" y="1" width="1.5" height="18" fill="#13111A" />
-                    <rect x="26" y="1" width="5" height="18" fill="#13111A" />
-                    <rect x="34" y="1" width="2" height="18" fill="#13111A" />
-                    <rect x="39" y="1" width="3" height="18" fill="#13111A" />
-                    <rect x="45" y="1" width="1.5" height="18" fill="#13111A" />
-                    <rect x="50" y="1" width="4" height="18" fill="#13111A" />
-                    <rect x="57" y="1" width="2" height="18" fill="#13111A" />
-                    <rect x="62" y="1" width="3.5" height="18" fill="#13111A" />
-                    <rect x="69" y="1" width="1.5" height="18" fill="#13111A" />
-                    <rect x="74" y="1" width="4" height="18" fill="#13111A" />
-                    <rect x="81" y="1" width="2" height="18" fill="#13111A" />
-                    <rect x="86" y="1" width="3" height="18" fill="#13111A" />
-                    <rect x="92" y="1" width="1.5" height="18" fill="#13111A" />
-                    <rect x="97" y="1" width="4" height="18" fill="#13111A" />
-                    <rect x="104" y="1" width="2" height="18" fill="#13111A" />
+                  <svg width="74" height="22" viewBox="0 0 74 22" fill="none" aria-hidden="true">
+                    <rect x="0" y="1" width="2.5" height="20" fill="#13111A" />
+                    <rect x="4" y="1" width="1.2" height="20" fill="#13111A" />
+                    <rect x="7" y="1" width="3.5" height="20" fill="#13111A" />
+                    <rect x="13" y="1" width="1.8" height="20" fill="#13111A" />
+                    <rect x="17" y="1" width="1.2" height="20" fill="#13111A" />
+                    <rect x="20" y="1" width="4" height="20" fill="#13111A" />
+                    <rect x="26" y="1" width="1.6" height="20" fill="#13111A" />
+                    <rect x="30" y="1" width="2.5" height="20" fill="#13111A" />
+                    <rect x="34" y="1" width="1.2" height="20" fill="#13111A" />
+                    <rect x="38" y="1" width="3.2" height="20" fill="#13111A" />
+                    <rect x="43" y="1" width="1.5" height="20" fill="#13111A" />
+                    <rect x="47" y="1" width="2.8" height="20" fill="#13111A" />
+                    <rect x="52" y="1" width="1.2" height="20" fill="#13111A" />
+                    <rect x="55" y="1" width="3.4" height="20" fill="#13111A" />
+                    <rect x="61" y="1" width="1.6" height="20" fill="#13111A" />
+                    <rect x="65" y="1" width="2.6" height="20" fill="#13111A" />
+                    <rect x="70" y="1" width="3" height="20" fill="#13111A" />
                   </svg>
                 </div>
 
                 {/* Protruding Flip Button */}
                 <button
+                  id="ly-turn"
                   type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     setFlipped(true);
+                    flipImpulseRef.current();
                   }}
-                  className="absolute -right-2 -bottom-2 rounded-full border border-[var(--hair)] bg-[var(--card)] px-3 py-1.5 mono text-[0.68rem] font-semibold text-[var(--ink)] shadow-md hover:border-[var(--ink)] cursor-pointer"
+                  className="absolute -right-1.5 -bottom-3.5 h-[30px] rounded-full border border-[var(--hair)] bg-[var(--card)] px-3 mono text-[0.64rem] font-semibold text-[var(--ink)] shadow-md hover:border-[var(--ink)] cursor-pointer"
+                  style={{ transform: "translateZ(1px)" }}
                 >
                   {UI_LABELS.flipButton}
                 </button>
               </div>
 
-              {/* Back Face (Crimson + Cobalt Blue Border) */}
+              {/* Back Face */}
               <div
-                className="absolute inset-0 flex flex-col justify-between rounded-[20px] border-[4.8px] border-[#0047AB] bg-[#B11313] p-5 text-white shadow-[0_30px_50px_-30px_rgba(19,17,26,0.6)]"
+                className="absolute inset-0 flex flex-col justify-between rounded-[18px] border-[5px] border-[#0047AB] bg-[#B11313] p-4 sm:p-5 text-[#F5F3EE] shadow-[0_30px_50px_-30px_rgba(19,17,26,0.6)]"
                 style={{
                   backfaceVisibility: "hidden",
                   transform: "rotateY(180deg)",
+                  backgroundImage:
+                    "radial-gradient(rgba(19,17,26,0.14) 1px, transparent 1.15px)",
+                  backgroundSize: "4px 4px",
                 }}
               >
                 <div>
                   <div className="flex items-center justify-between">
-                    <span className="mono text-[0.68rem] font-bold tracking-widest text-white/80">
+                    <span className="rounded-full bg-[#13111A] px-2.5 py-0.5 mono text-[0.62rem] font-bold tracking-wider text-white">
                       {HERO_CONTENT.badge.backHeading}
                     </span>
                   </div>
@@ -740,7 +1027,7 @@ export function HeroSection() {
                         <div className="font-display text-2xl min-[761px]:text-3xl font-extrabold text-white">
                           {st.value}
                         </div>
-                        <div className="mt-1 mono text-[0.62rem] text-white/80">
+                        <div className="mt-1 mono text-[0.62rem] text-white/85">
                           {st.label}
                         </div>
                       </div>
@@ -748,7 +1035,7 @@ export function HeroSection() {
                   </div>
                 </div>
 
-                <div className="border-t border-white/20 pt-3 mono text-[0.66rem] text-white/85">
+                <div className="border-t border-white/20 pt-3 mono text-[0.64rem] text-white/90">
                   {HERO_CONTENT.badge.serial}
                 </div>
 
@@ -757,8 +1044,10 @@ export function HeroSection() {
                   onClick={(e) => {
                     e.stopPropagation();
                     setFlipped(false);
+                    flipImpulseRef.current();
                   }}
-                  className="absolute -right-2 -bottom-2 rounded-full border border-white/30 bg-[var(--ink)] px-3 py-1.5 mono text-[0.68rem] font-semibold text-white shadow-md hover:bg-[var(--pink)] cursor-pointer"
+                  className="absolute -right-1.5 -bottom-3.5 h-[30px] rounded-full border border-white/30 bg-[var(--ink)] px-3 mono text-[0.64rem] font-semibold text-white shadow-md hover:bg-[var(--pink)] cursor-pointer"
+                  style={{ transform: "translateZ(1px)" }}
                 >
                   {UI_LABELS.flipButton}
                 </button>
@@ -770,4 +1059,3 @@ export function HeroSection() {
     </section>
   );
 }
-

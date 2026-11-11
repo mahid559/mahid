@@ -394,28 +394,59 @@
 /* ==================== HERO & UNDERLINE ==================== */
 .ly-ul {
   position: relative;
-  display: inline-block;
-  font-weight: 700;
+  display: inline;
+  font-weight: 800;
   color: var(--ink);
+  background-image: linear-gradient(var(--pink), var(--pink));
+  background-repeat: no-repeat;
+  background-position: 0 calc(100% - 0.08em);
+  background-size: 0% 0.08em;
 }
 
-.ly-ul::after {
+.ly-ul.is-drawn {
+  animation: ly-ul-sweep 2.3s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+@keyframes ly-ul-sweep {
+  0% {
+    background-size: 0% 0.08em;
+    background-position: 0 calc(100% - 0.08em);
+  }
+  30%,
+  68% {
+    background-size: 100% 0.08em;
+    background-position: 0 calc(100% - 0.08em);
+  }
+  100% {
+    background-size: 0% 0.08em;
+    background-position: 100% calc(100% - 0.08em);
+  }
+}
+
+.ly-badge-clip::before {
   content: "";
   position: absolute;
-  left: -2px;
-  right: -2px;
-  bottom: 0.04em;
-  height: 0.26em;
-  background: color-mix(in srgb, var(--pink) 36%, transparent);
-  transform-origin: left center;
-  transform: scaleX(0);
-  transition: transform 0.55s cubic-bezier(0.65, 0, 0.35, 1);
-  z-index: -1;
-  border-radius: 4px;
+  left: 50%;
+  top: -30px;
+  width: 34px;
+  height: 40px;
+  transform: translateX(-50%);
+  border-radius: 9px 9px 6px 6px;
+  background: linear-gradient(90deg, #8e8a99, #d9d6de 45%, #8e8a99);
+  border: 1.5px solid rgba(19, 17, 26, 0.25);
+  z-index: 2;
+  pointer-events: none;
 }
 
-.ly-ul.is-drawn::after {
-  transform: scaleX(1);
+.ly-bit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 22;
 }
 
 /* ==================== SHOWCASE CAROUSEL ==================== */
