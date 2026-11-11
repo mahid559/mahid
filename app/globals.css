@@ -988,7 +988,7 @@
   pointer-events: none;
 }
 
-/* ==================== COASTER MARQUEE LIGHTS ==================== */
+/* ==================== COASTER MARQUEE LIGHTS & SCENERY ==================== */
 @keyframes cz-chase {
   0%,
   33% {
@@ -996,7 +996,7 @@
   }
   34%,
   100% {
-    opacity: 0.28;
+    opacity: 0.22;
   }
 }
 
@@ -1008,6 +1008,44 @@
 }
 .cz-bulb-2 {
   animation: cz-chase 0.6s linear -0.4s infinite;
+}
+
+@keyframes cz-drift {
+  from {
+    transform: translateX(-28px);
+  }
+  to {
+    transform: translateX(28px);
+  }
+}
+
+@keyframes cz-bob {
+  from {
+    transform: translateY(-6px) rotate(-1.5deg);
+  }
+  to {
+    transform: translateY(6px) rotate(1.5deg);
+  }
+}
+
+@keyframes cz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.cz-drift {
+  animation: cz-drift var(--d, 54s) ease-in-out infinite alternate;
+}
+
+.cz-bob {
+  animation: cz-bob 3s ease-in-out infinite alternate;
+}
+
+.cz-spin {
+  animation: cz-spin 40s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
 }
 
 /* ==================== AFTER HOURS BENTO TILES ==================== */
