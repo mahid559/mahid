@@ -831,7 +831,7 @@
   border-radius: 20px;
   border: 3px solid var(--ink);
   background: color-mix(in srgb, var(--accent) 12%, var(--paper));
-  box-shadow: 12px 12px 0 0 color-mix(in srgb, var(--accent) 80%, transparent);
+  box-shadow: 8px 8px 0 0 color-mix(in srgb, var(--accent) 80%, transparent);
   overflow: hidden;
   transition: background-color 0.35s ease, box-shadow 0.35s ease;
 }
