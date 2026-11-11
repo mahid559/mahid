@@ -577,6 +577,21 @@
   color: transparent;
 }
 
+.pr-step.is-on .pr-hop-char {
+  animation: nm-hop 6s ease-in-out calc(var(--i, 0) * 45ms + 0.4s) infinite;
+}
+
+@keyframes nm-hop {
+  0%,
+  8%,
+  100% {
+    transform: translateY(0);
+  }
+  4% {
+    transform: translateY(-0.12em);
+  }
+}
+
 /* ==================== ABOUT TURNTABLE & CODEBLOCK ==================== */
 .a5-deck {
   position: relative;

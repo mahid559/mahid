@@ -8,10 +8,12 @@ export function ProcessSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const introRef = useRef<HTMLDivElement>(null);
   const wordsWrapRef = useRef<HTMLParagraphElement>(null);
+  const mobileWordsWrapRef = useRef<HTMLParagraphElement>(null);
   const stepRefs = useRef<(HTMLDivElement | null)[]>([]);
   const barRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const mobileTrackRef = useRef<HTMLDivElement>(null);
   const [mobileStep, setMobileStep] = useState(0);
+  const [activeDesktopStep, setActiveDesktopStep] = useState(-1);
 
   const words = PROCESS_CONTENT.statement.split(/\s+/);
 
@@ -24,12 +26,15 @@ export function ProcessSection() {
 
     if (reduced) {
       const wordEls = wordsWrapRef.current?.querySelectorAll(".pr-word");
+      const mWordEls = mobileWordsWrapRef.current?.querySelectorAll(".pr-m-word");
       if (wordEls) gsap.set(wordEls, { opacity: 1 });
+      if (mWordEls) gsap.set(mWordEls, { opacity: 1 });
       return;
     }
 
     const mm = gsap.matchMedia();
 
+    // Desktop Pinned Storytelling (FILL=1, BEAT=0.3, DWELL=0.5 -> ~6.9s timeline)
     mm.add("(min-width: 761px)", () => {
       const wordEls = wordsWrapRef.current?.querySelectorAll(".pr-word");
       const s0 = stepRefs.current[0];
@@ -58,97 +63,171 @@ export function ProcessSection() {
           pin: true,
           scrub: 1,
           anticipatePin: 1,
+          onUpdate: (self) => {
+            const p = self.progress;
+            if (p < 0.22) setActiveDesktopStep(-1);
+            else if (p < 0.5) setActiveDesktopStep(0);
+            else if (p < 0.76) setActiveDesktopStep(1);
+            else setActiveDesktopStep(2);
+          },
         },
       });
 
-      // Phase 1: Word-by-word illumination
-      tl.to(wordEls, {
-        opacity: 1,
-        stagger: 0.04,
-        duration: 1,
-        ease: "none",
-      });
+      // Phase 1: Word-by-word illumination (FILL = 1.0)
+      tl.to(
+        wordEls,
+        {
+          opacity: 1,
+          stagger: { amount: 0.9 },
+          duration: 0.1,
+          ease: "none",
+        },
+        0
+      );
 
-      // Phase 2: Step 01 expands from centered rounded rect to full bleed
+      // Phase 2: Step 01 Iris / Rounded-Rect Expansion (t0 = 1.3s)
+      const t0 = 1.3;
       const s0Img = s0.querySelector(".pr-bg");
       const s0Copy = s0.querySelectorAll(".pr-copy");
+      const s0Num = s0.querySelector(".pr-ghost-num");
+
       tl.to(
         introRef.current,
-        { scale: 0.9, opacity: 0, duration: 0.8, ease: "power2.inOut" },
-        "step1"
+        { scale: 0.9, opacity: 0, duration: 0.8, ease: "power1.in" },
+        t0 + 0.25
       )
         .to(
           s0,
           {
             opacity: 1,
-            clipPath: "inset(24% 22% 24% 22% round 24px)",
+            clipPath: "inset(26% 24% 26% 24% round 24px)",
             duration: 0.45,
             ease: "power2.out",
           },
-          "step1"
+          t0
         )
-        .to(s0, {
-          clipPath: "inset(0% 0% 0% 0% round 0px)",
-          duration: 0.65,
-          ease: "power2.inOut",
-        })
+        .to(
+          s0,
+          {
+            clipPath: "inset(0% 0% 0% 0% round 0px)",
+            duration: 0.7,
+            ease: "power2.inOut",
+          },
+          t0 + 0.45
+        )
         .fromTo(
           s0Img,
-          { scale: 1.3 },
-          { scale: 1, duration: 1.1, ease: "power2.out" },
-          "step1"
+          { scale: 1.3, xPercent: 0 },
+          { scale: 1, duration: 1.15, ease: "power2.out" },
+          t0
+        )
+        .to(
+          s0Img,
+          { scale: 1.06, xPercent: -3, duration: 0.5, ease: "none" },
+          t0 + 1.15
         )
         .fromTo(
           s0Copy,
           { y: 30, opacity: 0 },
-          { y: 0, opacity: 1, stagger: 0.08, duration: 0.5, ease: "power3.out" },
-          "-=0.4"
+          { y: 0, opacity: 1, stagger: 0.1, duration: 0.5, ease: "power2.out" },
+          t0 + 0.95
         )
-        .to(b0, { scaleX: 1, duration: 0.9, ease: "none" }, "step1");
+        .to(s0Copy, { y: -24, duration: 0.5, ease: "none" }, t0 + 1.45)
+        .fromTo(
+          s0Num,
+          { yPercent: 30, opacity: 0 },
+          { yPercent: 0, opacity: 1, duration: 0.6, ease: "power2.out" },
+          t0 + 0.85
+        )
+        .to(s0Num, { yPercent: -10, duration: 0.5, ease: "none" }, t0 + 1.45)
+        .to(b0, { scaleX: 1, duration: 0.5, ease: "none" }, t0 + 0.9);
 
-      // Phase 3: Step 02 horizontal wipe + parallax
-      const s1Img = s1.querySelector(".pr-bg");
-      const s1Copy = s1.querySelectorAll(".pr-copy");
-      tl.to(s1, {
-        clipPath: "inset(0% 0% 0% 0%)",
-        duration: 0.9,
-        ease: "power2.inOut",
-      })
-        .fromTo(
-          s1Img,
-          { xPercent: 12, scale: 1.12 },
-          { xPercent: 0, scale: 1, duration: 0.9, ease: "power2.out" },
-          "<"
-        )
-        .fromTo(
-          s1Copy,
-          { y: 30, opacity: 0 },
-          { y: 0, opacity: 1, stagger: 0.08, duration: 0.5, ease: "power3.out" },
-          "-=0.45"
-        )
-        .to(b1, { scaleX: 1, duration: 0.9, ease: "none" }, "<");
+      // Phase 3 & 4: Steps 02 & 03 Horizontal Wipe + Outgoing Parallax
+      const wipePairs = [
+        { prev: s0, next: s1, bar: b1, start: 2.8 },
+        { prev: s1, next: s2, bar: b2, start: 4.4 },
+      ];
 
-      // Phase 4: Step 03 horizontal wipe + parallax
-      const s2Img = s2.querySelector(".pr-bg");
-      const s2Copy = s2.querySelectorAll(".pr-copy");
-      tl.to(s2, {
-        clipPath: "inset(0% 0% 0% 0%)",
-        duration: 0.9,
-        ease: "power2.inOut",
-      })
-        .fromTo(
-          s2Img,
-          { xPercent: 12, scale: 1.12 },
-          { xPercent: 0, scale: 1, duration: 0.9, ease: "power2.out" },
-          "<"
+      wipePairs.forEach(({ prev, next, bar, start }) => {
+        const prevImg = prev.querySelector(".pr-bg");
+        const prevCopy = prev.querySelectorAll(".pr-copy");
+        const nextImg = next.querySelector(".pr-bg");
+        const nextCopy = next.querySelectorAll(".pr-copy");
+        const nextNum = next.querySelector(".pr-ghost-num");
+
+        tl.to(
+          next,
+          {
+            clipPath: "inset(0% 0% 0% 0%)",
+            duration: 0.9,
+            ease: "power2.inOut",
+          },
+          start
         )
-        .fromTo(
-          s2Copy,
-          { y: 30, opacity: 0 },
-          { y: 0, opacity: 1, stagger: 0.08, duration: 0.5, ease: "power3.out" },
-          "-=0.45"
-        )
-        .to(b2, { scaleX: 1, duration: 0.9, ease: "none" }, "<");
+          .to(
+            prevImg,
+            { xPercent: -13, duration: 0.9, ease: "power2.inOut" },
+            start
+          )
+          .to(
+            prevCopy,
+            {
+              x: -80,
+              opacity: 0,
+              stagger: 0.04,
+              duration: 0.5,
+              ease: "power2.in",
+            },
+            start
+          )
+          .fromTo(
+            nextImg,
+            { scale: 1.12, xPercent: 12 },
+            { scale: 1, xPercent: 0, duration: 1.0, ease: "power2.out" },
+            start
+          )
+          .to(
+            nextImg,
+            { scale: 1.06, xPercent: -3, duration: 0.5, ease: "none" },
+            start + 1.0
+          )
+          .fromTo(
+            nextCopy,
+            { y: 30, opacity: 0 },
+            { y: 0, opacity: 1, stagger: 0.1, duration: 0.5, ease: "power2.out" },
+            start + 0.45
+          )
+          .to(nextCopy, { y: -24, duration: 0.5, ease: "none" }, start + 0.95)
+          .fromTo(
+            nextNum,
+            { yPercent: 30, opacity: 0 },
+            { yPercent: 0, opacity: 1, duration: 0.6, ease: "power2.out" },
+            start + 0.45
+          )
+          .to(nextNum, { yPercent: -10, duration: 0.5, ease: "none" }, start + 1.05)
+          .to(bar, { scaleX: 1, duration: 0.5, ease: "none" }, start + 0.4);
+      });
+    });
+
+    // Mobile Unpinned Statement Scrub (opacity 0.5 -> 1)
+    mm.add("(max-width: 760px)", () => {
+      const mWordEls = mobileWordsWrapRef.current?.querySelectorAll(".pr-m-word");
+      if (!mWordEls || !mobileWordsWrapRef.current) return;
+      gsap.fromTo(
+        mWordEls,
+        { opacity: 0.5 },
+        {
+          opacity: 1,
+          stagger: { amount: 0.8 },
+          ease: "none",
+          scrollTrigger: {
+            trigger: mobileWordsWrapRef.current,
+            start: "top 85%",
+            end: "bottom 50%",
+            scrub: true,
+          },
+        }
+      );
     });
 
     return () => mm.revert();
@@ -209,13 +288,16 @@ export function ProcessSection() {
         {/* Full-Bleed Pinned Step Layers */}
         {PROCESS_CONTENT.steps.map((step, i) => {
           const accent = ACCENT_HEX[step.accent];
+          const isOn = activeDesktopStep === i;
           return (
             <div
               key={step.num}
               ref={(el) => {
                 stepRefs.current[i] = el;
               }}
-              className="pr-step-scrim absolute inset-0 z-20 flex items-center overflow-hidden bg-[var(--ink)]"
+              className={`pr-step pr-step-scrim ${
+                isOn ? "is-on" : ""
+              } absolute inset-0 z-20 flex items-center overflow-hidden bg-[var(--ink)]`}
               style={{ ["--accent" as string]: accent }}
             >
               <img
@@ -248,7 +330,15 @@ export function ProcessSection() {
                   </div>
 
                   <h3 className="pr-copy mt-4 font-display text-[clamp(2.5rem,1.4rem+4vw,5.4rem)] font-extrabold leading-[1.02] tracking-[-0.03em] text-white">
-                    {step.title}
+                    {Array.from(step.title).map((ch, cIdx) => (
+                      <span
+                        key={cIdx}
+                        className="pr-hop-char inline-block"
+                        style={{ ["--i" as string]: cIdx }}
+                      >
+                        {ch === " " ? "\u00A0" : ch}
+                      </span>
+                    ))}
                   </h3>
 
                   <p className="pr-copy mt-4 max-w-[48ch] text-lg sm:text-xl leading-relaxed text-white/85">
@@ -291,8 +381,15 @@ export function ProcessSection() {
           <h2 className="mt-2 font-display text-4xl font-extrabold">
             {PROCESS_CONTENT.heading}
           </h2>
-          <p className="mt-4 font-display text-xl font-normal leading-snug text-[var(--ink-soft)]">
-            {PROCESS_CONTENT.statement}
+          <p
+            ref={mobileWordsWrapRef}
+            className="mt-4 font-display text-xl font-normal leading-snug text-[var(--ink)]"
+          >
+            {words.map((w, idx) => (
+              <span key={idx} className="pr-m-word inline-block mr-[0.26em]">
+                {w}
+              </span>
+            ))}
           </p>
           <p className="mt-3 font-display text-lg font-extrabold text-[var(--pink-ink)]">
             {PROCESS_CONTENT.punchline}
@@ -315,7 +412,7 @@ export function ProcessSection() {
             return (
               <div
                 key={step.num}
-                className="pr-step-scrim relative min-h-[540px] w-[84vw] max-w-[330px] shrink-0 snap-center overflow-hidden rounded-[20px] border-2 border-[var(--ink)] bg-[var(--ink)] p-6 flex flex-col justify-end"
+                className="pr-step-scrim relative min-h-[540px] w-[86%] max-w-[340px] shrink-0 snap-center overflow-hidden rounded-[20px] border-2 border-[var(--ink)] bg-[var(--ink)] p-6 flex flex-col justify-end"
                 style={{ ["--accent" as string]: accent }}
               >
                 <img
@@ -361,6 +458,7 @@ export function ProcessSection() {
             <button
               type="button"
               aria-label={UI_LABELS.prevStepAria}
+              aria-disabled={mobileStep === 0}
               disabled={mobileStep === 0}
               onClick={() => scrollMobileTo(mobileStep - 1)}
               className="sc-btn disabled:opacity-40"
@@ -378,6 +476,7 @@ export function ProcessSection() {
             <button
               type="button"
               aria-label={UI_LABELS.nextStepAria}
+              aria-disabled={mobileStep === PROCESS_CONTENT.steps.length - 1}
               disabled={mobileStep === PROCESS_CONTENT.steps.length - 1}
               onClick={() => scrollMobileTo(mobileStep + 1)}
               className="sc-btn sc-btn--next disabled:opacity-40"
@@ -398,4 +497,3 @@ export function ProcessSection() {
     </section>
   );
 }
-
