@@ -1127,31 +1127,71 @@
   transform: translateX(5px);
 }
 
-/* ==================== CONTACT DOUBLE UNDERLINE & LINES & FAQ ==================== */
+/* ==================== CONTACT DOUBLE UNDERLINE, STICKERS, LINES & FAQ ==================== */
 .c3-title-ul {
   background-image: linear-gradient(var(--pink), var(--pink));
   background-repeat: no-repeat;
-  background-position: 0 92%;
-  background-size: 0% 6px;
-  animation: nm-line 6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  background-position: 0 calc(100% - 0.11em);
+  background-size: 0% 0.07em;
+  animation: nm-line 6s cubic-bezier(0.65, 0, 0.35, 1) 0.1s infinite;
 }
 
 @keyframes nm-line {
   0%,
   8% {
-    background-size: 0% 6px;
-    background-position: 0 92%;
+    background-size: 0% 0.07em;
+    background-position: 0 calc(100% - 0.11em);
   }
   32%,
   68% {
-    background-size: 100% 6px;
-    background-position: 0 92%;
+    background-size: 100% 0.07em;
+    background-position: 0 calc(100% - 0.11em);
   }
   92%,
   100% {
-    background-size: 0% 6px;
-    background-position: 100% 92%;
+    background-size: 0% 0.07em;
+    background-position: 100% calc(100% - 0.11em);
   }
+}
+
+.c3-s {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  filter: drop-shadow(0 6px 7px rgba(19, 17, 26, 0.22));
+  transition: transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.c3-s.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+
+.c3-s-back {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+}
+
+.c3-s-face {
+  position: absolute;
+  inset: 10%;
+}
+
+@keyframes c3-sent-pop {
+  0% {
+    opacity: 0;
+    transform: scale(2.4) rotate(-44deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-10deg);
+  }
+}
+
+.c3-sent-pop {
+  animation: c3-sent-pop 0.56s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
 .c3-line {

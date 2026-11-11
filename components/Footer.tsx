@@ -37,7 +37,7 @@ export function Footer() {
 
           <nav
             aria-label="Footer navigation"
-            className="flex flex-wrap items-center gap-1 sm:gap-2"
+            className="grid grid-cols-2 min-[761px]:flex flex-wrap items-center gap-x-4 gap-y-2 min-[761px]:gap-2"
           >
             {NAV_ITEMS.map((item) => (
               <a

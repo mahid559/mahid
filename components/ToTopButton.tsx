@@ -7,13 +7,24 @@ export function ToTopButton() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const onScroll = () => {
-      const threshold = window.innerHeight * 0.6;
-      setVisible(window.scrollY > threshold);
+    const mark = document.createElement("div");
+    mark.className = "top-mark pointer-events-none absolute top-0 left-0 h-[1px] w-[1px]";
+    mark.setAttribute("aria-hidden", "true");
+    document.body.prepend(mark);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry) setVisible(!entry.isIntersecting);
+      },
+      { threshold: 0 }
+    );
+    observer.observe(mark);
+
+    return () => {
+      observer.disconnect();
+      mark.remove();
     };
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   const scrollTop = () => {
@@ -50,4 +61,3 @@ export function ToTopButton() {
     </button>
   );
 }
-

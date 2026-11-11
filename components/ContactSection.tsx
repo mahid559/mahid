@@ -25,9 +25,102 @@ const COPY_SPRING: Keyframe[] = [
   { transform: "scale(1) rotate(0deg)" },
 ];
 
+interface StickerSpec {
+  id: string;
+  size: number;
+  color: string;
+  clip: string;
+  left: string;
+  top: string;
+  mobileLeft: string;
+  mobileTop: string;
+  rot: number;
+}
+
+const STICKERS: StickerSpec[] = [
+  {
+    id: "st-circle",
+    size: 86,
+    color: ACCENT_HEX.pink,
+    clip: "circle(50% at 50% 50%)",
+    left: "8%",
+    top: "6%",
+    mobileLeft: "4%",
+    mobileTop: "10%",
+    rot: -8,
+  },
+  {
+    id: "st-square",
+    size: 68,
+    color: ACCENT_HEX.blue,
+    clip: "inset(0 round 12px)",
+    left: "40%",
+    top: "0%",
+    mobileLeft: "26%",
+    mobileTop: "4%",
+    rot: 3,
+  },
+  {
+    id: "st-tri",
+    size: 76,
+    color: ACCENT_HEX.yellow,
+    clip: "polygon(50% 6%, 94% 88%, 6% 88%)",
+    left: "70%",
+    top: "8%",
+    mobileLeft: "50%",
+    mobileTop: "12%",
+    rot: 4,
+  },
+  {
+    id: "st-hex",
+    size: 80,
+    color: ACCENT_HEX.mint,
+    clip: "polygon(50% 4%, 93% 27%, 93% 73%, 50% 96%, 7% 73%, 7% 27%)",
+    left: "22%",
+    top: "46%",
+    mobileLeft: "72%",
+    mobileTop: "6%",
+    rot: 16,
+  },
+  {
+    id: "st-dia",
+    size: 56,
+    color: ACCENT_HEX.pink,
+    clip: "polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%)",
+    left: "54%",
+    top: "38%",
+    mobileLeft: "16%",
+    mobileTop: "52%",
+    rot: 6,
+  },
+  {
+    id: "st-pent",
+    size: 62,
+    color: ACCENT_HEX.blue,
+    clip: "polygon(50% 4%, 95% 38%, 78% 92%, 22% 92%, 5% 38%)",
+    left: "76%",
+    top: "48%",
+    mobileLeft: "44%",
+    mobileTop: "50%",
+    rot: -10,
+  },
+  {
+    id: "st-star",
+    size: 58,
+    color: ACCENT_HEX.yellow,
+    clip: "polygon(50% 2%, 63% 35%, 98% 37%, 71% 59%, 80% 94%, 50% 74%, 20% 94%, 29% 59%, 2% 37%, 37% 35%)",
+    left: "44%",
+    top: "68%",
+    mobileLeft: "68%",
+    mobileTop: "48%",
+    rot: 8,
+  },
+];
+
 export function ContactSection() {
   const sectionRef = useRef<HTMLElement>(null);
   const copyBtnRef = useRef<HTMLButtonElement>(null);
+  const zTopRef = useRef(10);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -38,6 +131,59 @@ export function ContactSection() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [sentName, setSentName] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const [stickerOffsets, setStickerOffsets] = useState<
+    Record<string, { x: number; y: number; rot: number; dragging: boolean; z: number }>
+  >(() =>
+    Object.fromEntries(
+      STICKERS.map((s, idx) => [
+        s.id,
+        { x: 0, y: 0, rot: s.rot, dragging: false, z: idx + 1 },
+      ])
+    )
+  );
+
+  const handleStickerDown = (id: string, e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture?.(e.pointerId);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const base = stickerOffsets[id] ?? { x: 0, y: 0, rot: 0, dragging: false, z: 1 };
+    const nextZ = ++zTopRef.current;
+
+    setStickerOffsets((prev) => ({
+      ...prev,
+      [id]: { ...base, dragging: true, z: nextZ },
+    }));
+
+    const onMove = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+      setStickerOffsets((prev) => ({
+        ...prev,
+        [id]: {
+          ...prev[id],
+          x: base.x + dx,
+          y: base.y + dy,
+          dragging: true,
+        },
+      }));
+    };
+
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      const nextRot = -15 + Math.random() * 30;
+      setStickerOffsets((prev) => ({
+        ...prev,
+        [id]: { ...prev[id], dragging: false, rot: nextRot },
+      }));
+    };
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,7 +251,7 @@ export function ContactSection() {
     if (!prefersReducedMotion() && copyBtnRef.current?.animate) {
       copyBtnRef.current.animate(COPY_SPRING, {
         duration: 450,
-        easing: "ease-out",
+        easing: "cubic-bezier(0.34, 1.56, 0.64, 1)",
       });
     }
     window.setTimeout(() => setCopied(false), 2000);
@@ -128,8 +274,8 @@ export function ContactSection() {
       <ShapeTrail containerRef={sectionRef} />
 
       <div className="shell relative z-10">
-        {/* Top Hero + Tilted Pill Below + Decorative Floating Stickers */}
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        {/* Top Hero + Tilted Pill Below + 7 Draggable Peel Stickers */}
+        <div className="relative flex flex-col-reverse lg:flex-row lg:items-center justify-between gap-6">
           <div>
             <div className="label">
               <span className="label-idx">{CONTACT_CONTENT.kickerIndex}</span>
@@ -141,81 +287,55 @@ export function ContactSection() {
 
             <div className="mt-5">
               <div
-                className="inline-flex items-center gap-2 rounded-full border-[2.4px] border-white bg-[var(--card)] px-4 py-2 mono text-[0.74rem] font-semibold text-[var(--ink)]"
+                className="inline-flex items-center gap-2 rounded-full border-[3px] border-white bg-[var(--card)] px-4 py-2 mono text-[0.74rem] font-semibold text-[var(--ink)]"
                 style={{
                   transform: "rotate(-3deg)",
                   boxShadow: "0 8px 16px -10px rgba(19, 17, 26, 0.45)",
                 }}
               >
-                <span className="h-2.5 w-2.5 rounded-full bg-[var(--mint)]" />
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--mint)] opacity-75" />
+                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-[var(--mint)]" />
+                </span>
                 <span>{CONTACT_CONTENT.statusPill}</span>
               </div>
             </div>
           </div>
 
-          {/* 7 Decorative Geometric Sticker Shapes */}
-          <div
-            className="hidden lg:block relative h-[180px] w-[280px] shrink-0 select-none"
-            aria-hidden="true"
-          >
-            <span
-              className="absolute left-4 top-2 h-11 w-11 border-[3px] border-white shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.pink,
-                borderRadius: "999px",
-                transform: "rotate(-8deg)",
-              }}
-            />
-            <span
-              className="absolute left-24 top-0 h-10 w-10 border-[3px] border-white shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.blue,
-                borderRadius: "8px",
-                transform: "rotate(12deg)",
-              }}
-            />
-            <span
-              className="absolute right-6 top-4 h-12 w-12 shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.yellow,
-                clipPath: "polygon(50% 6%, 94% 88%, 6% 88%)",
-                transform: "rotate(-10deg)",
-              }}
-            />
-            <span
-              className="absolute left-14 top-20 h-11 w-11 shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.mint,
-                clipPath: "polygon(50% 4%, 96% 50%, 50% 96%, 4% 50%)",
-                transform: "rotate(7deg)",
-              }}
-            />
-            <span
-              className="absolute left-36 top-16 h-12 w-12 shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.pink,
-                clipPath:
-                  "polygon(50% 2%, 63% 35%, 98% 37%, 71% 59%, 80% 94%, 50% 74%, 20% 94%, 29% 59%, 2% 37%, 37% 35%)",
-                transform: "rotate(-14deg)",
-              }}
-            />
-            <span
-              className="absolute right-2 top-24 h-10 w-10 shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.blue,
-                clipPath: "polygon(50% 4%, 95% 38%, 78% 92%, 22% 92%, 5% 38%)",
-                transform: "rotate(9deg)",
-              }}
-            />
-            <span
-              className="absolute left-28 bottom-1 h-9 w-9 shadow-md"
-              style={{
-                backgroundColor: ACCENT_HEX.yellow,
-                clipPath:
-                  "polygon(50% 4%, 93% 27%, 93% 73%, 50% 96%, 7% 73%, 7% 27%)",
-                transform: "rotate(-6deg)",
-              }}
-            />
+          {/* 7 Draggable Geometric Peel Stickers (Desktop right + Mobile above heading) */}
+          <div className="c3-peel relative h-[126px] lg:h-[210px] w-full lg:w-[320px] shrink-0">
+            {STICKERS.map((s) => {
+              const st = stickerOffsets[s.id];
+              return (
+                <div
+                  key={s.id}
+                  onPointerDown={(e) => handleStickerDown(s.id, e)}
+                  className={`c3-s ${st?.dragging ? "is-dragging" : ""} left-[var(--ml)] top-[var(--mt)] lg:left-[var(--dl)] lg:top-[var(--dt)]`}
+                  style={{
+                    width: s.size,
+                    height: s.size,
+                    zIndex: st?.z ?? 1,
+                    ["--ml" as string]: s.mobileLeft,
+                    ["--mt" as string]: s.mobileTop,
+                    ["--dl" as string]: s.left,
+                    ["--dt" as string]: s.top,
+                    transform: `translate3d(${st?.x ?? 0}px, ${st?.y ?? 0}px, 0) scale(${
+                      st?.dragging ? 1.1 : 1
+                    }) rotate(${st?.rot ?? s.rot}deg)`,
+                  }}
+                  aria-hidden="true"
+                >
+                  <span
+                    className="c3-s-back"
+                    style={{ clipPath: s.clip }}
+                  />
+                  <span
+                    className="c3-s-face"
+                    style={{ backgroundColor: s.color, clipPath: s.clip }}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -228,10 +348,7 @@ export function ContactSection() {
           >
             {sentName ? (
               <div className="relative py-8 text-center">
-                <div
-                  className="mx-auto mb-6 grid h-24 w-24 place-items-center rounded-full border-[5px] border-white bg-[var(--mint)] mono text-xs font-bold text-white shadow-lg"
-                  style={{ transform: "rotate(-10deg)" }}
-                >
+                <div className="c3-sent-pop mx-auto mb-6 grid h-24 w-24 place-items-center rounded-full border-[5px] border-white bg-[var(--mint)] mono text-xs font-bold text-white shadow-lg">
                   {CONTACT_CONTENT.form.sentStamp}
                 </div>
                 <h3 className="font-display text-3xl font-extrabold text-[var(--ink)]">
@@ -370,10 +487,10 @@ export function ContactSection() {
                 {CONTACT_CONTENT.directLinesHeading}
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Email Card (Wide) */}
                 <div
-                  className="c3-line col-span-2 flex items-center justify-between gap-3"
+                  className="c3-line sm:col-span-2 flex items-center justify-between gap-3"
                   style={{
                     ["--c" as string]: ACCENT_HEX.pink,
                     ["--tilt" as string]: "-1.2deg",
@@ -401,7 +518,7 @@ export function ContactSection() {
                 {/* Phone Card (Wide, Direct Lines only) */}
                 <a
                   href={PHONE_LINE.href}
-                  className="c3-line col-span-2 flex items-center justify-between gap-3"
+                  className="c3-line sm:col-span-2 flex items-center justify-between gap-3"
                   style={{
                     ["--c" as string]: ACCENT_HEX.blue,
                     ["--tilt" as string]: "0.7deg",
@@ -483,7 +600,7 @@ export function ContactSection() {
                       href={s.href}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="c3-line col-span-2 flex items-center justify-between gap-2"
+                      className="c3-line sm:col-span-2 flex items-center justify-between gap-2"
                       style={{
                         ["--c" as string]: c,
                         ["--tilt" as string]: tilts[idx % tilts.length],
@@ -543,4 +660,3 @@ export function ContactSection() {
     </section>
   );
 }
-
