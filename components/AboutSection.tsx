@@ -4,12 +4,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ABOUT_CONTENT, ACCENT_HEX } from "@/data/content";
 import { ensureGsap, prefersReducedMotion } from "@/lib/gsap";
 
-const GLITCH_CHARS = "!@#$%&*?/~^+=";
+const UPPER_POOL = "ABDEFGHKMNPRSTUVXYZ";
+const LOWER_POOL = "abdefghkmnprstuvxyz";
+const DIGIT_POOL = "0123456789";
+
+function randGlyph(orig: string): string {
+  if (orig >= "0" && orig <= "9") {
+    return DIGIT_POOL[Math.floor(Math.random() * DIGIT_POOL.length)];
+  }
+  if (orig >= "A" && orig <= "Z") {
+    return UPPER_POOL[Math.floor(Math.random() * UPPER_POOL.length)];
+  }
+  return LOWER_POOL[Math.floor(Math.random() * LOWER_POOL.length)];
+}
 
 export function AboutSection() {
   const [activeTrack, setActiveTrack] = useState(0);
-  const [armActive, setArmActive] = useState(false);
+  const [playing, setPlaying] = useState(false);
   const [typedCount, setTypedCount] = useState(0);
+  const [caretVisible, setCaretVisible] = useState(true);
   const [glitchMap, setGlitchMap] = useState<Record<number, string>>({});
   const [hoveredCode, setHoveredCode] = useState(false);
 
@@ -48,7 +61,19 @@ export function AboutSection() {
     [codeTokens]
   );
 
-  // Turntable + Tracklist Entrance & Cycling
+  // Flat source string + alphanumeric word ranges for multi-word scramble glitch
+  const { flatText, wordRanges } = useMemo(() => {
+    const flat = codeTokens.map((t) => t.text).join("");
+    const ranges: { start: number; end: number }[] = [];
+    const re = /[A-Za-z0-9]{2,}/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(flat)) !== null) {
+      ranges.push({ start: m.index, end: m.index + m[0].length });
+    }
+    return { flatText: flat, wordRanges: ranges };
+  }, [codeTokens]);
+
+  // Turntable + Tracklist Entrance
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
@@ -58,7 +83,7 @@ export function AboutSection() {
     const ctx = gsap.context(() => {
       const trackEls = tracksWrapRef.current?.querySelectorAll(".a5-track");
       if (reduced) {
-        setArmActive(true);
+        setPlaying(true);
         return;
       }
 
@@ -68,6 +93,7 @@ export function AboutSection() {
           start: "top 78%",
           once: true,
         },
+        delay: 0.15,
       });
 
       if (trackEls && trackEls.length) {
@@ -96,9 +122,9 @@ export function AboutSection() {
             opacity: 1,
             duration: 0.9,
             ease: "power3.inOut",
-            onComplete: () => setArmActive(true),
+            onComplete: () => setPlaying(true),
           },
-          0.35
+          0.45
         );
       }
     }, section);
@@ -106,26 +132,30 @@ export function AboutSection() {
     return () => ctx.revert();
   }, []);
 
-  // Visual track cycle every 2.6s
+  // Visual track cycle every 2.6s when spinning
   useEffect(() => {
-    if (prefersReducedMotion()) return;
+    if (prefersReducedMotion() || !playing) return;
     const id = window.setInterval(() => {
       setActiveTrack((i) => (i + 1) % ABOUT_CONTENT.tracks.length);
     }, 2600);
     return () => window.clearInterval(id);
-  }, []);
+  }, [playing]);
 
-  // Codeblock typewriter on scroll
+  // Codeblock typewriter on scroll + fade caret out after 1.2s
   useEffect(() => {
     const codeEl = codeRef.current;
     if (!codeEl) return;
     const { gsap, ScrollTrigger } = ensureGsap();
 
     if (prefersReducedMotion()) {
-      const id = window.setTimeout(() => setTypedCount(totalChars), 0);
+      const id = window.setTimeout(() => {
+        setTypedCount(totalChars);
+        setCaretVisible(false);
+      }, 0);
       return () => window.clearTimeout(id);
     }
 
+    let caretTimer: number | null = null;
     const st = ScrollTrigger.create({
       trigger: codeEl,
       start: "top 92%",
@@ -139,30 +169,112 @@ export function AboutSection() {
           duration: totalChars * 0.016,
           ease: "none",
           onUpdate: () => setTypedCount(Math.round(obj.count)),
-          onComplete: () => setTypedCount(totalChars),
+          onComplete: () => {
+            setTypedCount(totalChars);
+            caretTimer = window.setTimeout(() => setCaretVisible(false), 1200);
+          },
         });
       },
     });
 
     return () => {
       st.kill();
+      if (caretTimer) window.clearTimeout(caretTimer);
     };
   }, [totalChars]);
 
-  // Periodic character glitch (pauses on hover)
+  // Reference-matched 5–8 word scramble glitch every 1–3s (pauses on hover/selection/pause)
   useEffect(() => {
-    if (prefersReducedMotion() || typedCount < totalChars || hoveredCode) {
+    if (
+      prefersReducedMotion() ||
+      typedCount < totalChars ||
+      hoveredCode ||
+      !playing ||
+      !wordRanges.length
+    ) {
       return;
     }
-    const id = window.setInterval(() => {
-      const pos = Math.floor(Math.random() * totalChars);
-      const ch = GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
-      setGlitchMap({ [pos]: ch });
-      window.setTimeout(() => setGlitchMap({}), 140);
-    }, 1400);
 
-    return () => window.clearInterval(id);
-  }, [typedCount, totalChars, hoveredCode]);
+    let cancelled = false;
+    let mainTimer: number | null = null;
+    let tickTimer: number | null = null;
+
+    const scheduleNext = () => {
+      if (cancelled) return;
+      const waitMs = 1000 + Math.random() * 2000;
+      mainTimer = window.setTimeout(runGlitch, waitMs);
+    };
+
+    const runGlitch = () => {
+      if (cancelled) return;
+      // Pause if user is selecting text inside codeblock
+      const sel = window.getSelection?.();
+      if (
+        sel &&
+        !sel.isCollapsed &&
+        codeRef.current &&
+        codeRef.current.contains(sel.anchorNode)
+      ) {
+        scheduleNext();
+        return;
+      }
+
+      // Pick 5–8 random word ranges
+      const count = Math.min(wordRanges.length, 5 + Math.floor(Math.random() * 4));
+      const pool = [...wordRanges];
+      const chosen: { start: number; end: number }[] = [];
+      for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * pool.length);
+        chosen.push(pool.splice(idx, 1)[0]);
+      }
+
+      const holdSteps = 4 + Math.floor(Math.random() * 4); // 4–7 ticks
+      const maxWordLen = Math.max(...chosen.map((r) => r.end - r.start));
+      let step = 0;
+
+      const stepTick = () => {
+        if (cancelled) return;
+        step++;
+        if (step <= holdSteps) {
+          const nextMap: Record<number, string> = {};
+          chosen.forEach((r) => {
+            for (let p = r.start; p < r.end; p++) {
+              nextMap[p] = randGlyph(flatText[p]);
+            }
+          });
+          setGlitchMap(nextMap);
+          tickTimer = window.setTimeout(stepTick, 60);
+        } else {
+          // Resolve letter-by-letter
+          const resolvedCount = step - holdSteps;
+          if (resolvedCount <= maxWordLen) {
+            const nextMap: Record<number, string> = {};
+            chosen.forEach((r) => {
+              for (let p = r.start + resolvedCount; p < r.end; p++) {
+                nextMap[p] = randGlyph(flatText[p]);
+              }
+            });
+            setGlitchMap(nextMap);
+            tickTimer = window.setTimeout(stepTick, 55);
+          } else {
+            setGlitchMap({});
+            scheduleNext();
+          }
+        }
+      };
+
+      stepTick();
+    };
+
+    scheduleNext();
+
+    return () => {
+      cancelled = true;
+      if (mainTimer) window.clearTimeout(mainTimer);
+      if (tickTimer) window.clearTimeout(tickTimer);
+      setGlitchMap({});
+    };
+  }, [typedCount, totalChars, hoveredCode, playing, flatText, wordRanges]);
 
   const currentTrack = ABOUT_CONTENT.tracks[activeTrack] ?? ABOUT_CONTENT.tracks[0];
   const currentAccent = ACCENT_HEX[currentTrack.accent];
@@ -194,13 +306,17 @@ export function AboutSection() {
   });
 
   return (
-    <section id="about-bio" ref={sectionRef} className="sec-block bg-[var(--paper)]">
+    <section
+      id="about-bio"
+      ref={sectionRef}
+      className={`a5-deck-scope ${playing ? "is-playing" : ""} sec-block bg-[var(--paper)]`}
+    >
       <div className="shell">
         {/* Top 2-column Turntable + Tracklist */}
         <div className="grid grid-cols-1 min-[900px]:grid-cols-2 items-center gap-8 min-[900px]:gap-[clamp(32px,6vw,96px)]">
-          {/* Visual Vinyl Deck (Purely visual, no audio controls) */}
+          {/* Visual Vinyl Deck */}
           <div>
-            <div className="a5-deck mx-auto">
+            <div className={`a5-deck ${playing ? "is-playing" : ""} mx-auto`}>
               {/* Vinyl Disc */}
               <div
                 ref={discRef}
@@ -249,7 +365,7 @@ export function AboutSection() {
                 viewBox="0 0 120 210"
                 fill="none"
                 style={{
-                  transform: armActive ? "rotate(0deg)" : "rotate(-30deg)",
+                  transform: playing ? "rotate(0deg)" : "rotate(-30deg)",
                 }}
                 aria-hidden="true"
               >
@@ -300,7 +416,10 @@ export function AboutSection() {
                   <button
                     key={tr.code}
                     type="button"
-                    onClick={() => setActiveTrack(i)}
+                    onClick={() => {
+                      setActiveTrack(i);
+                      setPlaying(true);
+                    }}
                     className={`a5-track flex items-center justify-between gap-4 py-1 text-left cursor-pointer ${
                       isActive ? "is-active" : ""
                     }`}
@@ -340,7 +459,7 @@ export function AboutSection() {
                   {parts ? (
                     <>
                       {parts[0]}
-                      <span className="ly-ul is-drawn">{hl}</span>
+                      <span className="a5-role">{hl}</span>
                       {parts[1]}
                     </>
                   ) : (
@@ -364,7 +483,12 @@ export function AboutSection() {
             <pre className="m-0 whitespace-pre-wrap break-words font-[inherit]">
               <code>
                 {renderedTokens}
-                <span className="a5-caret" aria-hidden="true" />
+                <span
+                  className={`a5-caret transition-opacity duration-300 ${
+                    caretVisible ? "opacity-100" : "opacity-0"
+                  }`}
+                  aria-hidden="true"
+                />
               </code>
             </pre>
           </div>
@@ -373,4 +497,3 @@ export function AboutSection() {
     </section>
   );
 }
-
