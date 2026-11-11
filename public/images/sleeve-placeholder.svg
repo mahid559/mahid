@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600" fill="none">
+  <rect width="600" height="600" fill="#D6D3CA"/>
+  <rect x="16" y="16" width="568" height="568" rx="8" stroke="#8F8B81" stroke-width="2" stroke-dasharray="6 6"/>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#8F8B81" font-family="monospace" font-size="30" font-weight="600" letter-spacing="2">[COVER PLACEHOLDER]</text>
+</svg>

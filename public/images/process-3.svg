@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" fill="none">
+  <rect width="1440" height="900" fill="#403C4A"/>
+  <rect x="16" y="16" width="1408" height="868" rx="8" stroke="#726D80" stroke-width="2" stroke-dasharray="6 6"/>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#726D80" font-family="monospace" font-size="45" font-weight="600" letter-spacing="2">[PROCESS 03 IMAGE]</text>
+</svg>

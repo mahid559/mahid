@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300" fill="none">
+  <rect width="400" height="300" fill="#DBD8CF"/>
+  <rect x="16" y="16" width="368" height="268" rx="8" stroke="#928E84" stroke-width="2" stroke-dasharray="6 6"/>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#928E84" font-family="monospace" font-size="15" font-weight="600" letter-spacing="2">[PHOTO]</text>
+</svg>

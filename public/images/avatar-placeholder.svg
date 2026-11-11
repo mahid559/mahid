@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="640" viewBox="0 0 480 640" fill="none">
+  <rect width="480" height="640" fill="#DCD9D0"/>
+  <rect x="16" y="16" width="448" height="608" rx="8" stroke="#9E9A90" stroke-width="2" stroke-dasharray="6 6"/>
+  <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle" fill="#9E9A90" font-family="monospace" font-size="24" font-weight="600" letter-spacing="2">[PORTRAIT PLACEHOLDER]</text>
+</svg>
