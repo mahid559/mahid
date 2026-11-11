@@ -491,16 +491,10 @@
 
 .sc-wipe {
   position: absolute;
-  inset: 0;
+  inset: -2px -2px -2px -16%;
   clip-path: polygon(14% 0, 100% 0, 100% 100%, 0 100%);
+  transform-origin: right center;
   pointer-events: none;
-  opacity: 0.78;
-  transition: opacity 0.45s ease, transform 0.6s var(--ease);
-}
-
-.sc-slide.is-active .sc-wipe {
-  opacity: 0;
-  transform: translateX(100%);
 }
 
 .sc-btn {

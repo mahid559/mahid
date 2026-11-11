@@ -27,22 +27,65 @@ export function ProjectsSection() {
 
   useEffect(() => {
     const grid = gridRef.current;
-    if (!grid || prefersReducedMotion()) return;
-    const { gsap } = ensureGsap();
-    const cards = grid.querySelectorAll(".proj-card");
+    if (!grid) return;
+    const { gsap, ScrollTrigger } = ensureGsap();
+    const cards = Array.from(grid.querySelectorAll<HTMLElement>(".proj-card"));
     if (!cards.length) return;
-    gsap.fromTo(
-      cards,
-      { y: 18, opacity: 0 },
-      {
-        y: 0,
-        opacity: 1,
-        duration: 0.45,
-        stagger: 0.05,
-        ease: "power3.out",
-        overwrite: true,
+
+    if (prefersReducedMotion()) {
+      gsap.set(cards, { y: 0, opacity: 1 });
+      return;
+    }
+
+    const ctx = gsap.context(() => {
+      if (selectedCat === UI_LABELS.projectsAllFilter) {
+        gsap.set(cards, { opacity: 0, y: 100 });
+        ScrollTrigger.batch(cards, {
+          start: "top 95%",
+          onEnter: (batch) =>
+            gsap.to(batch, {
+              y: 0,
+              opacity: 1,
+              duration: 0.65,
+              stagger: 0.06,
+              ease: "power3.out",
+              overwrite: true,
+            }),
+          onEnterBack: (batch) =>
+            gsap.fromTo(
+              batch,
+              { y: -100, opacity: 0 },
+              {
+                y: 0,
+                opacity: 1,
+                duration: 0.65,
+                stagger: 0.06,
+                ease: "power3.out",
+                overwrite: true,
+              }
+            ),
+          onLeave: (batch) =>
+            gsap.set(batch, { opacity: 0, y: -100, overwrite: true }),
+          onLeaveBack: (batch) =>
+            gsap.set(batch, { opacity: 0, y: 100, overwrite: true }),
+        });
+      } else {
+        gsap.fromTo(
+          cards,
+          { y: 24, opacity: 0 },
+          {
+            y: 0,
+            opacity: 1,
+            duration: 0.5,
+            stagger: 0.06,
+            ease: "power3.out",
+            overwrite: true,
+          }
+        );
       }
-    );
+    }, grid);
+
+    return () => ctx.revert();
   }, [selectedCat]);
 
   return (
